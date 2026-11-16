@@ -9,6 +9,7 @@ __pycache__
 *.pyc
 docs
 tests
+data
 .vscode
 *.code-workspace
 .DS_Store

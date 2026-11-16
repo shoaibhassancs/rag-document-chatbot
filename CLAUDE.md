@@ -18,7 +18,10 @@ At the start of every session, read @SPEC.md and @WORKFLOW.md and follow them. L
 - Test: `uv run pytest`
 - Lint and format: `uv run ruff check .` and `uv run ruff format .`
 - Check keys (one tiny call each, prints only OK or FAIL): `uv run python -m scripts.check_keys`
-- Planned, not built yet: `scripts.ingest_folder`, `scripts.reembed`, `eval/run_eval.py` (throttled and resumable)
+- Ingest a folder: `uv run python -m scripts.ingest_folder data/sample_docs [--dry-run] [--url URL]`; re-embed: `uv run python -m scripts.reembed [--dry-run] [--yes]`; seed file: `uv run python -m scripts.seed build|load|check`
+- Regenerate sample PDFs (dev only): `uv run python -m scripts.make_sample_pdfs`
+- Database tests use a throwaway `ragdb_test` database on the Compose Postgres (skipped if it is down)
+- Planned, not built yet: `eval/run_eval.py` (throttled and resumable)
 
 ## Rules of thumb
 

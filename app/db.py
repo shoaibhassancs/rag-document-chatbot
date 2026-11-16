@@ -1,8 +1,13 @@
-"""Database access. Milestone 1 only needs a connectivity and pgvector check."""
+"""Database access: a connectivity and pgvector check, and a connection helper."""
 
 from dataclasses import dataclass
 
 import psycopg
+
+
+def connect(database_url: str) -> psycopg.Connection:
+    """Open a connection. As a context manager it commits on success, rolls back on error."""
+    return psycopg.connect(database_url)
 
 
 @dataclass

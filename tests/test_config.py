@@ -66,3 +66,11 @@ def test_unknown_role_or_key_name_is_rejected():
 def test_embedding_defaults_match_spec():
     s = make()
     assert (s.embedding_model, s.embedding_dimensions) == ("voyage-4", 1024)
+
+
+def test_tests_cannot_reach_the_internet():
+    """The network guard in conftest.py makes any real Groq or Voyage call fail the test."""
+    import socket
+
+    with pytest.raises(AssertionError, match="non-local"):
+        socket.create_connection(("93.184.216.34", 443), timeout=1)

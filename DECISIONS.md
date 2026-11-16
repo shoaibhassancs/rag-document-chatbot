@@ -138,6 +138,30 @@ Tags: **[Owner]** decided by the owner; **[Assumption]** Claude's proposal the o
 ### D-022 Streamlit host port [Owner]
 - Port 8501 is used by another container, so Milestone 6 gives Streamlit a configurable host port, default 8511.
 
+## Milestone 2 decisions (Nov 16, 2026)
+
+### D-023 Milestone 2 plan approved; owner's choices [Owner]
+- Own loaders on `pypdf` and `beautifulsoup4` plus `langchain-text-splitters` only (SPEC.md stack rows updated at the owner's request); plain SQL migrations; async 202 ingest with one background worker; fail at startup on an embedding config mismatch.
+- Sample set: 30 files, 29 unique ("near-duplicate" = same text re-saved under another name, `faq-printed-copy.md`). Prices in PDFs are plain "service, price" lines; the table-heavy PDF lives only in `tests/fixtures/`; each demo question has one source document.
+- `ALLOW_PRIVATE_URLS` defaults to false in code and `.env.example`; the owner sets it in their own `.env`.
+- Seed file: built as gzipped JSON, **not to be committed until Voyage's terms are checked and the owner approves**. `data/seed/` is in `.gitignore` for now (my addition, to prevent an accidental `git add .`; remove the line when approved).
+- The `NOTES.md` line in `.gitignore` was not added by me (the owner added it). Because `NOTES.md` is already tracked, ignoring it does not stop git tracking it.
+
+### D-024 Milestone 2 build choices [Assumption: Claude]
+- **Chunking.** Sizes are estimates (characters / 4); no `tiktoken`. PDF chunks never cross a page (exact page). Markdown/HTML split only at `#` and `##` headings (deeper headings stay as text); sections shorter than about 150 tokens are packed with the next one, and the chunk keeps the first heading as `section`. First attempt (split at every heading) gave 162 chunks averaging 74 tokens, too small, so it was changed. Result: 89 chunks, mean about 250 tokens (text 465, PDF 369, Markdown 182, HTML 160), **below the spec's 500 to 800 range**. Not tuned yet: the spec says to tune chunk size in Milestone 5 against the evaluation baseline.
+- **Footer/header cleaner.** Removes short lines at the top/bottom edge of a page that repeat on at least 60% of pages with page numbers masked. A first version masked all digits and wrongly removed body lines like "Step 1"; fixed and covered by a test.
+- **Dedup.** Document hash is over whitespace-collapsed text. Same name and hash: unchanged. Same name, new hash: update (unchanged chunks keep their vectors). New name, same hash: duplicate, skipped. Chunk-level reuse: identical chunk text is embedded once and its vector copied.
+- **Schema.** `documents`, `chunks` (nullable `vector(N)` from config, HNSW cosine), `app_meta`, `schema_migrations`. Migrations are `db/migrations/*.sql` with `{{EMBEDDING_DIMENSIONS}}`, applied under an advisory lock. The API runs them at startup.
+- **Startup check** compares config with `app_meta`, the real column size and the models stored on chunks; an unfinished re-embed also blocks startup.
+- **Limiter.** Sliding 60 s window enforcing 3 requests/min and 10,000 tokens/min together; the first batch uses chars/4 x 1.15, then calibrates from `usage.total_tokens`.
+- **Errors.** 429 waits `Retry-After` if present, else 20/40/60/60 s, 5 tries; 401/402/403 stop at once ("tell the owner"); other 4xx no retry; 5xx and timeouts 3 retries. All non-429 4xx meanings are unverified (see below).
+- **API.** `POST /ingest` returns 202 (400 if every item is rejected); parsing, chunking and bad-file rejection happen before the 202, embedding runs in the background. Progress is `status`, `chunks`, `chunks_done` on `GET /documents`. No separate job endpoint. `DELETE` returns 409 while a document is still ingesting. Limits: 10 MB per file, 20 files per request, file names reduced to their last path part.
+- **Added dependencies** (pinned in `uv.lock`): pypdf 7.1.0, beautifulsoup4 4.15.0, langchain-text-splitters 1.1.3 (pulls in langchain-core 1.8.1, langsmith and others), python-multipart 0.0.34; dev only: reportlab 5.1.0. API image grew from 406 MB to 523 MB.
+
+### D-025 Voyage facts seen in this milestone [Verified by running it]
+- A live ingestion of the sample set succeeded with no billing or quota error. Real 429s also occurred (when a query was sent right after the ingestion) and carried **no `Retry-After` header**, so the 20/40 s fallback was used; the retry then succeeded.
+- Voyage's Terms of Service (via search result, not read in full): the customer keeps ownership of data it provides; Voyage may use it to improve the service unless the customer opts out. **Not found: anything on who owns or may redistribute returned embeddings.** Unverified, so the seed stays uncommitted until the owner decides.
+
 ## Blockers found during verification (all resolved by the second round)
 
 ### B-1 Mistral free plan has no API access [RESOLVED: owner dropped Mistral, see D-012]
@@ -180,8 +204,17 @@ Tags: **[Owner]** decided by the owner; **[Assumption]** Claude's proposal the o
 | Nov 16, 2026 | Image sizes | API image 406 MB; pgvector image 676 MB |
 | Nov 16, 2026 | First `docker compose up` | failed: host port 5432 in use by an existing Postgres; then 5433 and 8000 in use by other projects' containers. Fixed by moving to 5440 and 8010 (D-018) |
 | Nov 16, 2026 | A multi-file shell command was refused by a built-in safety check (it contained no removal) | nothing ran; I created the files with the Write tool instead |
+| Nov 16, 2026 | `uv run ruff check .` and `uv run pytest -q` after Milestone 2 | all checks passed; 189 passed (22 from Milestone 1 plus 167 new), 0 skipped; database tests ran against a throwaway `ragdb_test` on the Compose Postgres; a test proves outbound connections are blocked |
+| Nov 16, 2026 | `docker compose up -d --build` | migration `001_init.sql` applied on startup; API image 523 MB |
+| Nov 16, 2026 | `curl` on the running API | `/health` 200 `ok`; `GET /documents` empty; `POST /ingest` and `DELETE` return 401 without or with a wrong key |
+| Nov 16, 2026 | Startup with `EMBEDDING_MODEL=voyage-3.5`, and with `EMBEDDING_DIMENSIONS=512`, against the real database | both refuse with `EmbeddingConfigMismatch` naming the old and new values and `scripts.reembed` |
+| Nov 16, 2026 | `scripts.ingest_folder data/sample_docs --dry-run` | 29 documents (1 duplicate), 89 chunks, 25,835 estimated tokens, 4 requests, about 3 min |
+| Nov 16, 2026 | Real `scripts.ingest_folder data/sample_docs` (first Voyage embedding run) | exit 0; 89 chunks embedded in 4 requests; tokens estimated 23,617 vs actual 21,363; 2m04s; all 29 documents `ready`, all `voyage-4`; owner to check the Usage page |
+| Nov 16, 2026 | Repeat of the same command | 0 requests, 0 tokens: 29 unchanged, 1 duplicate |
+| Nov 16, 2026 | Nearest-neighbour sanity check with 2 real query embeddings (14 tokens) | "Delta Dental" query: insurance PDF page 1 first; extraction diet query: aftercare PDF page 1 first |
+| Nov 16, 2026 | `scripts.seed build` then `check` | 29 documents, 89 chunks, 344,222 bytes (measured; the plan estimated about 0.5 MB); `check` reports current |
 
 ## Open decisions
 
-- None blocking. To settle: whether `voyage-4` is covered by the free 200M tokens (owner checks the Usage page, D-015); the pre-embedded seed file (D-016, Milestone 2); whether reasoning tokens count against Groq's per-minute limit (D-012a, Milestone 3); whether clarify-before-retrieving meets the latency and accuracy goals (D-013, Milestone 5).
+- None blocking. To settle: the owner's check of the Voyage Usage page after the first real ingestion (D-020, about 21.4K tokens used); whether the seed file may be committed (D-016, D-023, D-025: Voyage terms on returned embeddings unverified); chunk size, since the mean is about 250 tokens against the spec's 500 to 800 (D-024, Milestone 5); whether reasoning tokens count against Groq's per-minute limit (D-012a, Milestone 3); whether clarify-before-retrieving meets the latency and accuracy goals (D-013, Milestone 5).
 - Closed: provider (D-012), clarify strategy (D-013), hosting (D-014: "not needed: showcase is video and screenshots; live hosting parked").

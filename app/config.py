@@ -71,6 +71,24 @@ class Settings(BaseSettings):
     embedding_model: str = "voyage-4"
     embedding_dimensions: int = 1024
     embedding_base_url: str = "https://api.voyageai.com/v1"
+    # Voyage free tier without a payment method: 3 requests/min and 10,000 tokens/min together.
+    voyage_requests_per_minute: int = 3
+    voyage_tokens_per_minute: int = 10_000
+    voyage_max_batch_tokens: int = 8_000
+
+    # --- Chunking (token counts are estimates: characters / 4) ---
+    chunk_size_tokens: int = 600
+    chunk_overlap_tokens: int = 100
+
+    # --- Ingestion limits ---
+    max_upload_mb: int = 10
+    max_files_per_request: int = 20
+    url_timeout_seconds: int = 10
+    url_max_bytes: int = 2_000_000
+    # Off by default: URL ingestion refuses private, loopback and link-local addresses.
+    allow_private_urls: bool = False
+
+    log_level: str = "INFO"
 
     def api_key_for(self, var_name: str) -> SecretStr | None:
         field = var_name.lower()

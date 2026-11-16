@@ -17,6 +17,9 @@ pgdata/
 data/uploads/
 eval/.state/
 
+# Pre-embedded seed file: stays out of git until the owner has checked Voyage's terms (D-023)
+data/seed/
+
 # Models and large artifacts
 models/
 *.safetensors
@@ -34,3 +37,6 @@ build/
 .idea/
 .vscode/
 *.code-workspace
+
+# Owner notes (kept local)
+NOTES.md

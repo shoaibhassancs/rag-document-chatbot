@@ -48,7 +48,7 @@ Everything runs locally in VS Code with Docker, using tools that appear in real 
 | --- | --- | --- |
 | Language | Python 3.12, managed with `uv`; same version in the Dockerfile | Strongest skill; every later project reuses it |
 | API | FastAPI + Uvicorn | The backend most RAG job posts ask for |
-| RAG framework | LangChain (loaders, splitters only) | Listed in many job posts; core logic stays in our own code |
+| RAG framework | LangChain text splitters only (`langchain-text-splitters`); our own loaders | Listed in many job posts; core logic stays in our own code, and the image stays lighter than with `langchain-community` |
 | LLM provider | **Groq free plan only**, via one OpenAI-compatible client | Mistral and Cerebras are not free for API use. Each model has its own quota: 30 requests/min, 1K requests/day, 8K tokens/min, 200K tokens/day (owner's console) |
 | Answer model | `openai/gpt-oss-120b` | Best quality available free |
 | Rewrite and clarify model | `openai/gpt-oss-20b` | Small and cheap; separate quota from the answerer |
@@ -56,7 +56,7 @@ Everything runs locally in VS Code with Docker, using tools that appear in real 
 | LLM config | Provider, base URL, model, key setting, reasoning effort and output cap are separate config values for each role (answer, judge, rewrite) | Switching provider is a config change |
 | Embeddings | Voyage AI `voyage-4`, 1024 dimensions, behind a small embedder interface | 200M free tokens per account; no local model needed |
 | Vector database | Postgres + pgvector (Docker), HNSW index with cosine distance | One database for vectors, metadata, memory and logs; reused in projects 3 and 6 |
-| Document parsing | `pypdf`, plus Markdown, TXT and HTML loaders. Scanned PDFs are out of scope | Covers the formats clients actually send |
+| Document parsing | Our own loaders on `pypdf` (PDF) and `beautifulsoup4` (HTML and web pages), plus Markdown and TXT. Scanned PDFs are out of scope | Covers the formats clients actually send |
 | Chat UI | Streamlit | Fast to build |
 | Evaluation | Small custom LLM-judge scorer | Numbers you can explain without notes |
 | Packaging | Docker Compose, `.env`, `pytest` | What clients expect at handover |

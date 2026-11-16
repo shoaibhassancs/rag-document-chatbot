@@ -51,8 +51,8 @@ def test_503_when_pgvector_extension_is_missing():
 def test_response_never_contains_key_values_or_connection_string():
     r = call_health(
         DbStatus(ok=True, pgvector_version="0.8.7"),
-        groq_api_key="gsk-secret-1",
-        voyage_api_key="pa-secret-2",
+        groq_api_key="fake-groq-secret-1",
+        voyage_api_key="fake-voyage-secret-2",
         database_url="postgresql://u:pw-secret-3@h/db",
     )
     assert "secret" not in r.text

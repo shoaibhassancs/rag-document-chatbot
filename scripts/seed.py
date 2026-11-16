@@ -5,7 +5,9 @@
   uv run python -m scripts.seed check   # is the seed current for data/sample_docs?
 
 `build` makes no Voyage calls (it reads vectors that are already in the database).
-The seed file is git-ignored until the owner approves committing it (see DECISIONS.md D-023).
+OPTIONAL and LOCAL ONLY: the seed file is never committed (`data/seed/` stays in .gitignore
+permanently, see DECISIONS.md D-027). A full ingestion takes only about 2 minutes, so a fresh clone
+simply runs `scripts.ingest_folder`. The seed tool is a local convenience.
 """
 
 import argparse

@@ -4,9 +4,153 @@ Milestone summaries, written in plain English. Each is added only after the owne
 
 ## Milestone 1: Setup
 
+### What this milestone does
+Milestone 1 builds the foundation and nothing else. It starts a small web service (the API) and a database that can store vectors. It has one working endpoint, `/health`, which reports whether the system is ready. It also has a script that checks the two API keys work. There is no chatbot yet, no documents and no AI behaviour. The aim was to prove the base stack runs, so every later milestone builds on something tested.
+
+### How it works
+- **Two containers, started with one command.** `docker compose up -d --build` starts the API (FastAPI) and Postgres with the pgvector extension, which adds a "vector" column type. pgvector is what lets Postgres later store and search embeddings.
+- **Settings come from `.env`.** One settings file reads `.env` and the environment. API keys are held as secret values, so printing the settings never shows them.
+- **Each AI job has its own setting group.** The answerer (`gpt-oss-120b`), the rewrite/clarify step (`gpt-oss-20b`) and the judge (`qwen3.8-27b`) each have their own provider, URL, model, key, reasoning effort and output cap. Switching a role to another provider is a config change, not a code change.
+- **`/health` reports readiness without spending quota.** `ok` when the database, pgvector and both keys are in place; `degraded` (HTTP 200) when a key is missing but the database works; `down` (HTTP 503) when the database or pgvector is missing. It only checks that keys are *set*. It never calls Groq or Voyage, so it can't use up free-tier limits.
+- **`scripts/check_keys.py`** makes one tiny call per provider and prints only OK or FAIL. For Groq it lists models (uses no tokens) and confirms the four configured models exist. For Voyage it embeds one word and checks the vector has 1024 numbers.
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| Python 3.12 via `uv`, pinned | Matches the spec; 3.13 can lag on package support |
+| Groq only, one model per role | Mistral's free plan has no API access and Cerebras isn't free, which leaves Groq for a $0 budget |
+| Judge from a different model family | So the judge doesn't grade its own style |
+| Keys resolved by name (`GROQ_API_KEY`), not `${VAR}` expansion | Avoids relying on expansion behaving the same in Compose and Python |
+| Host ports 5440 (database) and 8010 (API) | Other containers already use 5432, 5433 and 8000 |
+| Reasoning effort `low`, with output caps | Groq's reasoning models "think" before answering and those tokens are output; the limit is 8K tokens/min |
+| No clarify-hook code yet | A placeholder file would break the "no placeholders" rule; the real hook arrives with the service layer in Milestone 3 |
+
+### AI and engineering concepts involved
+- **Embedding dimension.** An embedding is a list of numbers that represents a text's meaning. Ours has 1024, set in config and never hard-coded.
+- **Rate limits and tokens.** Free tiers cap requests and tokens per minute (Groq: 8K tokens/min per model; Voyage: 3 requests/min and 10K tokens/min). That shapes batching and prompt design from now on.
+- **Reasoning tokens.** gpt-oss models think before answering. Groq's docs say this reasoning is part of the output, but not whether it counts against the per-minute limit. Milestone 3 will test that.
+- **OpenAI-compatible client.** Groq speaks the same protocol as OpenAI, so one client works for every role.
+- **Mocking.** Tests replace Groq and Voyage with fakes, so they run fast, free, and never touch the network.
+
+### What was verified
+- `ruff` clean and 22 tests pass (config 8, health 5, key check 9).
+- `docker compose up -d --build` starts both containers.
+- `/health` returns 200 `ok` with pgvector 0.8.7 and both keys configured.
+- With the database stopped, `/health` returns 503 `down`; after a restart it returns 200 again.
+- The real `check_keys` run printed `groq: OK` and `voyage: OK`.
+- No key-shaped strings exist anywhere outside `.env`.
+- Owner-reported: the Voyage Usage page shows `voyage-4` with 200M free tokens remaining.
+
+### What to watch out for
+- The clean-clone run is not done yet (Milestone 7). `.gitignore` is untested because the folder was not a git repo at the time.
+- Whether reasoning tokens count against Groq's per-minute limit is unchecked (Milestone 3). The Groq limits come from the owner's console, which is the authority; Groq's public table labels them "Developer plan".
+- `qwen3.8-27b` is a preview model and could change or disappear. With Groq as the only provider, an outage or quota hit stops everything.
+- If another container uses host port 5440 or 8010, the stack won't start. Both ports are configurable.
+- Tests don't touch the real database yet; the health tests use a fake database checker, and the real database was checked by hand with curl.
+- Starlette warns that `httpx` in its TestClient is deprecated in favour of `httpx2`. Not acted on.
+- `.gitignore` lists `NOTES.md` under "Owner notes (kept local)", so this file will not be committed.
+
 ## Milestone 2: Ingestion
 
+### What this milestone does
+Milestone 2 turns documents into searchable knowledge. It reads PDF, Markdown, text and web pages, cleans them, cuts them into chunks, turns each chunk into an embedding (a list of 1024 numbers that stands for its meaning) and stores everything in Postgres. It adds the endpoints to upload, list and delete documents, and two command-line tools: one to ingest a folder and one to rebuild all embeddings. There is still no chat and no answering. The demo clinic's 30 sample files are ingested and ready for search.
+
+### How it works
+- **Loading.** Our own small loaders read each format. A PDF page keeps its page number, with running headers and footers removed. Markdown and web pages keep the nearest heading as the section. A web page is fetched from one URL, only if it is http or https, small, and not on a private or local address (unless `ALLOW_PRIVATE_URLS=true`).
+- **Duplicates.** Each document gets a hash of its text with all spacing collapsed. Same name and hash: skipped as unchanged. Same name, new text: updated, and unchanged chunks keep their vectors. Different name, same text: skipped as a duplicate. This is how `faq-printed-copy.md` is caught.
+- **Chunking.** Pages never mix. Markdown splits at `#` and `##` headings, and very small sections are merged. Chunks are up to about 600 tokens with overlap. Sizes are estimates (characters divided by 4).
+- **Embedding under the free limits.** Voyage allows 3 requests and 10,000 tokens per minute. A limiter enforces both. Chunks are batched by token count, about 8K per request. After each batch the vectors are saved, so a crash loses nothing and a rerun continues. Identical chunk text is embedded once. A rate-limit error (429) waits and retries. A 401, 402 or 403 stops everything with a message to tell the owner.
+- **Storage.** Chunks are saved first without vectors, then embedded. The vector size comes from config and appears in one place, the migration. Search uses an HNSW index with cosine distance.
+- **Startup safety.** The API runs the migration, then refuses to start if the configured embedding model or size differs from what the database was built with, or if a re-embed was left unfinished. This stops a silent mix of vectors from different models.
+- **API.** `POST /ingest` (key required) checks the files straight away, rejects bad ones with a reason, answers 202 and embeds in a background worker. `GET /documents` shows status and progress. `DELETE /documents/{id}` (key required) removes a document and its chunks, and refuses with 409 while it is still being embedded.
+- **Tools.** `scripts.ingest_folder` (with `--dry-run` to estimate cost and time first), `scripts.reembed` (rebuilds every vector from stored text; changing the vector size needs `--yes`) and `scripts.seed` (optional, local only).
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| Own loaders plus `langchain-text-splitters` only | Lighter and clearer than `langchain-community`; the logic stays in our code |
+| Plain SQL migrations | Alembic would add SQLAlchemy for a four-table schema |
+| 202 plus a background worker | A throttled ingest takes minutes, too long for one web request |
+| Fail at startup on an embedding mismatch | Mixed vectors give wrong search results without any error |
+| Heading-aware chunks, mean about 250 tokens | Keeps the section heading exact; compared with 600-token packing in Milestone 5 |
+| Seed file never committed | A full ingestion takes only about 2 minutes, and Voyage's terms on returned embeddings were not found |
+| Hash of whitespace-collapsed text | A re-saved copy with different spacing is still recognised |
+
+### AI and engineering concepts involved
+- **Chunking.** Documents are cut into pieces because search and prompts work on small passages. Too small loses context, too big dilutes meaning.
+- **Embedding and `input_type`.** Documents are embedded as `document` and questions will be embedded as `query`, so they land close together in the vector space.
+- **Cosine distance and HNSW.** Cosine measures the angle between two embeddings. HNSW is an index that finds the nearest ones quickly.
+- **Throttling and idempotency.** Rate limits shape the design: token-sized batches, saved progress, safe reruns. Idempotent means running it twice gives the same result.
+- **Prompt injection stays text.** The fixture document containing "ignore previous instructions" is stored as ordinary text. Whether the bot obeys it is tested in later milestones.
+
+### What was verified
+- `ruff` clean and 189 tests pass. Tests cover loaders, chunker, limiter, the Voyage client against mocked replies, the database (a throwaway `ragdb_test`), the API, re-embedding, the command-line tools and the seed file. A test confirms outbound network calls are blocked.
+- The real stack applied the migration, and the API refuses to start with a different model or vector size.
+- One real ingestion: 89 chunks in 4 requests, 21,363 actual tokens against 23,617 estimated, 2 minutes 4 seconds. All 29 documents are `ready`. A repeat run made 0 requests.
+- Two real queries returned the right documents first (Delta Dental to the insurance PDF, extraction diet to the aftercare PDF). This was a sanity check, not retrieval.
+- Voyage returned real 429s with no `Retry-After` header, and the fallback wait recovered.
+- Owner will check the Voyage Usage page and report the count.
+
+### What to watch out for
+- Chunks average about 250 tokens, below the original 500 to 800 target (spec updated, D-026). Retrieval quality comparison is in Milestone 5.
+- The meaning of Voyage's 401, 402 and 403 is unverified, so all three stop the run.
+- The limiter lives inside one process. Running the CLI while the API is embedding can cause extra 429s that backoff absorbs.
+- `DELETE` was tested against a real Postgres but not by hand on the demo data, to avoid repeating Voyage spend.
+- The API image is 523 MB, up from 406 MB, because of `langchain-text-splitters` and its dependencies.
+- The clean-clone test is still due in Milestone 7; a fresh clone must run `scripts.ingest_folder` (about 2 minutes).
+
 ## Milestone 3: Retrieval and answers
+
+Approved by the reviewer on the owner's behalf, Nov 17, 2026 (overnight run); owner to confirm.
+
+### What this milestone does
+Milestone 3 makes the chatbot answer. A question goes to `POST /chat`. The system turns the question into an embedding, finds the five most similar chunks in the database, drops weak matches, and asks a language model to answer using only those chunks. The reply has a status (`answered`, `refused` or `error`) and a list of sources. If nothing in the documents is close enough, it refuses without calling the model. Clarifying questions and conversation memory arrive in Milestone 4.
+
+### How it works
+- **Retrieval.** The query is embedded (cached for repeats), then pgvector returns the top five chunks by cosine similarity. A similarity threshold of 0.40 drops weak chunks. If none remain, the reply is a fixed refusal and the model is never called.
+- **Answering.** The remaining chunks are numbered and sent with the question under a versioned prompt (`prompts/answer_v2.txt`). The model must reply in JSON: whether the excerpts answer the question, the answer, and which excerpts it used. If it says they don't, the reply is a refusal.
+- **Citations are built in code** from the file, page and section of the chunks the model used, never from text the model writes. If the model names an invalid excerpt, only the top-scoring chunk is cited and a warning is logged.
+- **Text is data.** Chunk text and the question are wrapped in tags and never treated as instructions. Text that imitates our tags is neutralised.
+- **One LLM client for every role.** It sends requests to Groq, waits and retries on short rate limits, switches to a fallback model on a daily cap or repeated 429s, retries server errors twice, retries once when Groq reports it could not generate valid JSON, and reports token use. Errors never show a stack trace; the user sees a configurable "busy" message with HTTP 503.
+- **Voyage wait cap.** A chat query waits at most about 20 seconds for the embedding rate limit before returning the busy reply. Ingestion keeps its long schedule.
+- **Service layer.** The logic lives in `app/services/chat.py` with no FastAPI imports. A hook is ready where Milestone 4 plugs in the clarify call.
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| Similarity threshold 0.40, provisional | Just below the lowest score a needed chunk had on the 16 answerable calibration questions. It was tuned on the same 28 questions, so Milestone 5 re-checks it on a separate set |
+| The prompt is the real guard against off-topic answers | No threshold separates dental-adjacent out-of-scope questions (antibiotics, Invisalign) from real ones, because their scores overlap |
+| Prompt v2 adds one generic rule: answer only exactly what was asked | On the 120b it fixed the home-address question but not the antibiotics one; the 20b refused both |
+| Default answer model `gpt-oss-20b`, provisional | It refused every out-of-scope question in the comparison. The 120b stays a candidate and the fallback. Both have the same free limits, so this is not about quota. The final choice is made in Milestone 5 from numbers |
+| One retry on Groq's "Failed to generate JSON" error (provisional) | The 20b hit it on 2 of 6 calls on one question; without a retry a visitor would see the busy message |
+| `error` status with HTTP 503 | A model failure should look different from "not in the documents" |
+| Refusal and busy texts are configurable | The wording is a client-facing choice |
+
+### AI and engineering concepts involved
+- **Retrieval-augmented generation (RAG):** fetch relevant text first, then let the model answer from it.
+- **Similarity score and threshold:** how close two embeddings are, and the cut-off for "too weak to use".
+- **Grounded prompting and structured output:** the model is told to use only the excerpts and to return JSON that code can check.
+- **Prompt injection:** text in documents or questions that tries to give orders. It is treated as data.
+- **Temperature 0 and repeatability:** temperature 0 does not make outputs identical. The wording of the same answer varied between identical runs.
+- **Fallback and backoff:** how the client survives free-tier limits.
+
+### What was verified
+- 319 tests pass and ruff is clean. Tests never call Groq or Voyage.
+- Real calls: the threshold was calibrated on 28 questions with one Voyage request. Live smoke runs on both models. Under prompt v1 the 120b answered the antibiotics and home-address questions wrongly.
+- Prompt comparison on the 28 questions, three combinations. In all three, all 16 answerable questions were answered with an expected source cited. Wrong answers to out-of-scope questions: v1/120b two, v2/120b one, v2/20b none.
+- Stability check (prompt v2, three runs per question). The 120b answered the antibiotics question wrongly 3 of 3 times. The 20b refused every out-of-scope question in every call that completed; 2 of its 6 calls on the injection question returned Groq's 'Failed to generate JSON' error, and its set is incomplete (no clean 3 x 6 run).
+- Live latency on the 20b (median, 9 questions): embedding 1.2 s, search 0.1 s, model 0.65 s, total about 1.8 s.
+- Owner-reported: Voyage usage after ingestion was 21,377 tokens, matching the estimate of about 21,400.
+
+### What to watch out for
+- The threshold and the prompt were tuned on the same 28 questions. Milestone 5 uses a separate set.
+- The 20b returned Groq HTTP 400 "Failed to generate JSON" on 2 of 6 calls on the injection question. A one-retry fix is built and tested with mocks but not yet verified live.
+- The 20b stability set is incomplete: the runs were stopped twice by that error.
+- Model outputs are not exactly repeatable, so one run is weak evidence.
+- The answer-model choice between the 20b and 120b is provisional.
+- Over-citation: one clear case (the 20b citing an extra file on the numbness question). The other extra citations looked like gaps in the expected-source lists.
+- Answer correctness in the comparison was spot-checked by Claude, not fully verified.
+- Whether Groq counts reasoning tokens against the per-minute limit is still inconclusive (about 300 tokens of uncertainty). The plan is to budget prompt plus the 600-token cap per call.
 
 ## Milestone 4: Guardrails and memory
 

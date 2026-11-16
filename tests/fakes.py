@@ -29,17 +29,63 @@ class FakeEmbedder:
         self.requests = 0
         self.texts_embedded: list[str] = []
         self.input_types: list[str] = []
+        self.max_waits: list[float | None] = []
 
     def estimate_tokens(self, text: str) -> int:
         return estimate_tokens(text)
 
-    def embed(self, texts: list[str], input_type: str) -> EmbedResult:
+    def embed(
+        self, texts: list[str], input_type: str, max_wait: float | None = None
+    ) -> EmbedResult:
         if self.fail_after_requests is not None and self.requests >= self.fail_after_requests:
             raise EmbeddingAccountError("fake: quota exhausted")
         self.requests += 1
         self.texts_embedded.extend(texts)
         self.input_types.append(input_type)
+        self.max_waits.append(max_wait)
         return EmbedResult(
             [fake_vector(t, self.dimensions) for t in texts],
             sum(estimate_tokens(t) for t in texts),
         )
+
+
+def fake_llm_result(text: str = "{}", **overrides):
+    from app.generation.llm import LLMResult
+
+    values = dict(
+        text=text,
+        model="fake-llm",
+        finish_reason="stop",
+        prompt_tokens=100,
+        completion_tokens=40,
+        total_tokens=140,
+        reasoning_tokens=10,
+        cached_tokens=0,
+        latency_ms=5,
+        attempts=1,
+        fallback_used=False,
+    )
+    values.update(overrides)
+    return LLMResult(**values)
+
+
+class FakeAnswerer:
+    """Stands in for the answer model. Records every call. `reply` is an Answer-building
+    function of (question, hits); `error` is raised instead when set."""
+
+    prompt_version = "fake"
+
+    def __init__(self, reply=None, error: Exception | None = None):
+        from app.generation.answer import Answer
+
+        self._reply = reply or (
+            lambda q, hits: Answer(True, "Fake answer.", hits[:1], fake_llm_result())
+        )
+        self._error = error
+        self.calls: list[tuple[str, list]] = []
+
+    def answer(self, question, hits):
+        self.calls.append((question, list(hits)))
+        if self._error is not None:
+            raise self._error
+        return self._reply(question, hits)

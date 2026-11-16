@@ -19,7 +19,7 @@ from app.ingest.embedder import (
 )
 from app.ingest.ratelimit import RateLimiter
 
-SECRET = "pa-super-secret-key"
+SECRET = "fake-voyage-secret-key"
 DIMS = 4
 
 
@@ -248,3 +248,58 @@ def test_build_embedder_requires_a_key_and_the_voyage_provider():
         build_embedder(Settings(_env_file=None, voyage_api_key="k", embedding_provider="other"))
     built = build_embedder(Settings(_env_file=None, voyage_api_key="k"))
     assert built.model == "voyage-4" and built.dimensions == 1024
+
+
+# ----------------------------------------------------------------------------- wait cap (chat)
+
+
+def test_with_a_cap_a_429_wait_over_the_cap_gives_up_without_sleeping():
+    h = Harness([httpx.Response(429), ok(1)])  # no Retry-After: the default first wait is 20 s
+    with pytest.raises(EmbeddingRateLimited, match="cap"):
+        h.embedder.embed(["q"], "query", max_wait=10)
+    assert h.sleeps == [] and len(h.requests) == 1  # it did not wait, and did not retry
+
+
+def test_with_a_cap_short_waits_still_succeed_and_the_total_is_bounded():
+    h = Harness(
+        [
+            httpx.Response(429, headers={"retry-after": "8"}),
+            httpx.Response(429, headers={"retry-after": "8"}),
+            ok(1),
+        ]
+    )
+    assert len(h.embedder.embed(["q"], "query", max_wait=20).vectors) == 1
+    assert sum(h.sleeps) == 16
+    h = Harness([httpx.Response(429, headers={"retry-after": "8"})] * 3)
+    with pytest.raises(EmbeddingRateLimited):
+        h.embedder.embed(["q"], "query", max_wait=20)  # 8 + 8 fits, the third 8 would not
+    assert sum(h.sleeps) == 16
+
+
+def test_with_a_cap_the_limiters_own_wait_counts_too():
+    h = Harness([ok(1) for _ in range(4)])
+    for _ in range(3):
+        h.embedder.embed(["q"], "query", max_wait=20)  # three requests fill the window
+    with pytest.raises(EmbeddingRateLimited, match="cap"):
+        h.embedder.embed(["q"], "query", max_wait=5)  # the 4th would wait about 60 s
+    assert len(h.requests) == 3
+
+
+def test_with_a_cap_server_error_backoff_is_bounded_too():
+    h = Harness([httpx.Response(503)] * 4)
+    with pytest.raises(EmbeddingRateLimited):
+        h.embedder.embed(["q"], "query", max_wait=4)  # waits 2 s, then 5 s would pass the cap
+    assert sum(h.sleeps) == 2
+
+
+def test_without_a_cap_ingestion_keeps_its_long_schedule():
+    h = Harness([httpx.Response(429), httpx.Response(429), ok(1)])
+    h.embedder.embed(["q"], "document")
+    assert h.sleeps == [20, 40]
+
+
+def test_embed_query_passes_the_cap_down():
+    h = Harness([httpx.Response(429), ok(1)])
+    with pytest.raises(EmbeddingRateLimited):
+        CachingEmbedder(h.embedder).embed_query("q", 5)
+    assert h.sleeps == []

@@ -63,7 +63,9 @@ class Embedder(Protocol):
 
     def estimate_tokens(self, text: str) -> int: ...
 
-    def embed(self, texts: list[str], input_type: InputType) -> EmbedResult: ...
+    def embed(
+        self, texts: list[str], input_type: InputType, max_wait: float | None = None
+    ) -> EmbedResult: ...
 
 
 def plan_batches(
@@ -132,9 +134,25 @@ class VoyageEmbedder:
             observed = self._actual_total / self._raw_total
             self._ratio = min(max(observed * 1.05, 0.5), 3.0)
 
-    def embed(self, texts: list[str], input_type: InputType) -> EmbedResult:
+    def embed(
+        self, texts: list[str], input_type: InputType, max_wait: float | None = None
+    ) -> EmbedResult:
+        """`max_wait` caps the TOTAL seconds this call may spend waiting (limiter and backoff).
+        Chat queries pass a small cap so a user is never left hanging; ingestion passes none and
+        keeps the long retry schedule. Over the cap: EmbeddingRateLimited, nothing is sent late."""
         if not texts:
             return EmbedResult([], 0)
+        waited = 0.0
+
+        def spend(seconds: float) -> None:
+            nonlocal waited
+            if max_wait is not None and waited + seconds > max_wait:
+                raise EmbeddingRateLimited(
+                    f"Voyage would need a {seconds:.0f}s wait; the cap for this call is "
+                    f"{max_wait:.0f}s."
+                )
+            waited += seconds
+
         raw = sum(estimate_tokens(t) for t in texts)
         budget = min(sum(self.estimate_tokens(t) for t in texts), self._limiter.tpm)
         body = {
@@ -147,6 +165,7 @@ class VoyageEmbedder:
         rate_attempt = 0
         server_attempt = 0
         while True:
+            spend(self._limiter.seconds_until_allowed(budget))
             event = self._limiter.acquire(budget)
             self.requests += 1
             self.tokens_estimated += budget
@@ -161,6 +180,7 @@ class VoyageEmbedder:
                     raise EmbeddingServiceError(
                         f"Voyage unreachable after retries ({type(exc).__name__})."
                     ) from None
+                spend(self.RETRY_5XX_DELAYS[server_attempt])
                 self._backoff("network error", self.RETRY_5XX_DELAYS[server_attempt])
                 server_attempt += 1
                 continue
@@ -174,6 +194,7 @@ class VoyageEmbedder:
                         "Voyage kept returning 429 (rate limit). Progress is saved; run again later."  # noqa: E501
                     )
                 delay = self._retry_after(response, self.RETRY_429_DELAYS[rate_attempt])
+                spend(delay)
                 self._backoff("429 rate limited", delay)
                 rate_attempt += 1
                 continue
@@ -185,6 +206,7 @@ class VoyageEmbedder:
             if 500 <= status < 600:
                 if server_attempt >= len(self.RETRY_5XX_DELAYS):
                     raise EmbeddingServiceError(f"Voyage returned HTTP {status} after retries.")
+                spend(self.RETRY_5XX_DELAYS[server_attempt])
                 self._backoff(f"HTTP {status}", self.RETRY_5XX_DELAYS[server_attempt])
                 server_attempt += 1
                 continue
@@ -252,17 +274,19 @@ class CachingEmbedder:
     def estimate_tokens(self, text: str) -> int:
         return self._inner.estimate_tokens(text)
 
-    def embed(self, texts: list[str], input_type: InputType) -> EmbedResult:
-        return self._inner.embed(texts, input_type)
+    def embed(
+        self, texts: list[str], input_type: InputType, max_wait: float | None = None
+    ) -> EmbedResult:
+        return self._inner.embed(texts, input_type, max_wait)
 
-    def embed_query(self, text: str) -> list[float]:
+    def embed_query(self, text: str, max_wait: float | None = None) -> list[float]:
         key = " ".join(text.split()).lower()
         if key in self._cache:
             self._cache.move_to_end(key)
             self.hits += 1
             return self._cache[key]
         self.misses += 1
-        vector = self._inner.embed([text], "query").vectors[0]
+        vector = self._inner.embed([text], "query", max_wait).vectors[0]
         self._cache[key] = vector
         if len(self._cache) > self._max:
             self._cache.popitem(last=False)

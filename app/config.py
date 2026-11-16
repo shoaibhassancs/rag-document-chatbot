@@ -6,8 +6,9 @@ setting, so switching a role to another OpenAI-compatible provider is a config c
 """
 
 from functools import lru_cache
+from pathlib import Path
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Key settings a role may point at (lower-case Settings field names).
@@ -42,13 +43,13 @@ class Settings(BaseSettings):
     # --- Answer role ---
     answer_llm_provider: str = "groq"
     answer_llm_base_url: str = "https://api.groq.com/openai/v1"
-    answer_llm_model: str = "openai/gpt-oss-120b"
+    answer_llm_model: str = "openai/gpt-oss-20b"
     answer_llm_api_key_var: str = "GROQ_API_KEY"
     answer_llm_reasoning_effort: str | None = "low"
     answer_llm_max_output_tokens: int = 600
     # Fallback when the answer model hits its daily cap or repeated 429s.
     answer_fallback_enabled: bool = True
-    answer_fallback_model: str = "openai/gpt-oss-20b"
+    answer_fallback_model: str = "openai/gpt-oss-120b"
 
     # --- Judge role (a different model family from the answerer) ---
     judge_llm_provider: str = "groq"
@@ -88,7 +89,35 @@ class Settings(BaseSettings):
     # Off by default: URL ingestion refuses private, loopback and link-local addresses.
     allow_private_urls: bool = False
 
+    # --- Retrieval and answering ---
+    top_k: int = 5
+    # PROVISIONAL (Milestone 3): chunks scoring below this cosine similarity are dropped, and if
+    # none are left the question is refused without calling the LLM. Blank means "not set":
+    # nothing is dropped and the service warns. Calibrated with scripts/calibrate_threshold.py.
+    similarity_threshold: float | None = None
+    prompts_dir: Path = Path(__file__).resolve().parent.parent / "prompts"
+    answer_prompt_version: str = "answer_v2"
+    # Fixed reply texts. Configurable so a client can change the wording without code changes.
+    refusal_message: str = "I couldn't find that in our documents. Please contact the clinic."
+    busy_message: str = "The assistant is busy right now. Please try again in a minute."
+
+    # A chat question waits at most this long (limiter plus retries) for its Voyage embedding;
+    # over the cap the user gets the busy reply. Ingestion keeps its own, longer schedule.
+    query_embed_max_wait_seconds: float = 20.0
+
+    # --- LLM client behaviour ---
+    llm_max_retries: int = 3  # retries after a 429 before falling back or giving up
+    llm_max_wait_seconds: float = 20.0  # a longer Retry-After is treated as a daily cap
+    llm_timeout_seconds: float = 30.0
+
     log_level: str = "INFO"
+
+    @field_validator("similarity_threshold", mode="before")
+    @classmethod
+    def _blank_threshold_is_unset(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     def api_key_for(self, var_name: str) -> SecretStr | None:
         field = var_name.lower()

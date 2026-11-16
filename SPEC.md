@@ -76,7 +76,7 @@ The system has two pipelines that share one pgvector database: ingestion prepare
 
 ![Architecture diagram](docs/architecture.png)
 
-**Ingestion:** load and clean (text plus pages) → **content-hash check** (skip unchanged files, update changed ones) → chunk (500 to 800 tokens, with overlap) → embed (Voyage, `input_type=document`, batches of about 8K tokens, 3 requests per minute, resumable) → store in pgvector with metadata and the embedding model name.
+**Ingestion:** load and clean (text plus pages) → **content-hash check** (skip unchanged files, update changed ones) → chunk (target up to about 600 tokens, split at headings, tiny sections merged; short documents give smaller chunks; with overlap) → embed (Voyage, `input_type=document`, batches of about 8K tokens, 3 requests per minute, resumable) → store in pgvector with metadata and the embedding model name.
 
 **Query (clarify before retrieving):**
 
@@ -87,7 +87,7 @@ The system has two pipelines that share one pgvector database: ingestion prepare
 5. Otherwise one grounded call to the answer model (`gpt-oss-120b`) returns a structured result. If it says the chunks do not contain the answer, the reply is `status=refused`.
 6. Build the reply and citations in code from chunk metadata, then log.
 
-**Three outcomes (`status`):** `answered`, `refused`, `clarify`. A model or service failure returns a friendly "service busy, try again" message, is logged as an error, and never shows a stack trace.
+**Three outcomes (`status`):** `answered`, `refused`, `clarify`. A model or service failure returns `status=error` with HTTP 503 and a friendly "service busy, try again" message (the text is configurable), is logged as an error, and never shows a stack trace. (Added in Milestone 3, owner decision; see DECISIONS.md.)
 
 **Citations are built in code from the metadata (file, page) of the chunks actually retrieved and used, never from text the LLM writes.** Every exchange is logged so evaluation can trace which chunks produced each answer.
 
@@ -100,7 +100,7 @@ The system has two pipelines that share one pgvector database: ingestion prepare
 The chatbot must do these 10 things; each one maps to a question clients ask in job posts.
 
 1. **Ingest documents:** load PDF, Markdown, TXT and one web URL from a folder (CLI script, safe to re-run) or an upload endpoint. URL loading is one page the owner names, not a crawler.
-2. **Clean and chunk:** split text into chunks of about 500 to 800 tokens with overlap. Keep metadata on every chunk: file name, page, section heading. **"Page" means the PDF page number (1-based). For Markdown, TXT and HTML it is null, and the nearest section heading is stored in `section` and shown in citations instead.**
+2. **Clean and chunk:** split text into chunks (target up to about 600 tokens, split at headings, tiny sections merged; short documents give smaller chunks), with overlap. Keep metadata on every chunk: file name, page, section heading. **"Page" means the PDF page number (1-based). For Markdown, TXT and HTML it is null, and the nearest section heading is stored in `section` and shown in citations instead.**
 3. **Embed and store:** embed each chunk (`input_type=document`) and store it in pgvector. A content hash of each file is checked between load and chunk; re-ingesting the same file updates it instead of creating duplicates. Ingestion is resumable and throttled (see free-tier rules).
 4. **Retrieve:** embed the standalone query (`input_type=query`); return the top 5 chunks by vector similarity. A score threshold drops weak matches.
 5. **Answer with citations:** the LLM answers only from the retrieved chunks, and each answer lists its sources as file name plus page (or section), built from chunk metadata.
@@ -117,7 +117,7 @@ If a feature isn't in the in-scope list, don't build it in this project. Most ou
 **In scope**
 
 - Ingestion pipeline for PDF, Markdown, TXT and one web URL, with content-hash de-duplication, throttled and resumable
-- Chunking with metadata, embeddings and storage in pgvector; re-embed command; optional pre-embedded seed file for the sample documents (decided in Milestone 2)
+- Chunking with metadata, embeddings and storage in pgvector; re-embed command; optional, local-only pre-embedded seed file for the sample documents (decided in Milestone 2: built but never committed)
 - Clarify-before-retrieval call, vector retrieval with a similarity threshold
 - Grounded answers with citations (file and page) built from metadata
 - Refusal for out-of-scope questions and clarifying questions for vague ones, with a `status` field
@@ -154,7 +154,7 @@ If a feature isn't in the in-scope list, don't build it in this project. Most ou
 | POST | `/ingest` | `X-API-Key` | Upload files or a URL; parse, chunk, embed and store them |
 | GET | `/documents` | none | List ingested documents with chunk counts |
 | DELETE | `/documents/{id}` | `X-API-Key` | Remove a document and its chunks |
-| POST | `/chat` | none | Body: `session_id`, `message`. Returns `answer`, `status` (`answered` / `refused` / `clarify`), `sources[]`, `latency_ms` |
+| POST | `/chat` | none | Body: `session_id`, `message`. Returns `answer`, `status` (`answered` / `refused` / `clarify`, or `error` with HTTP 503 when a model or service fails), `sources[]`, `latency_ms` |
 | GET | `/health` | none | Checks the API, database (and pgvector) and whether the LLM and embedding keys are set. It makes no paid or rate-limited calls. |
 
 `/chat` and `/documents` are open because this runs locally for a showcase. The `APP_API_KEY` value comes from `.env`. The README's Production notes say a real deployment needs authentication on every route.
@@ -227,7 +227,7 @@ Run the evaluation after every major change and keep a results table in the READ
 2. **Ingestion:** loaders, content-hash dedup, chunking with metadata, embedder interface (Voyage, token-sized batches, 3 requests per minute, resumable, query-embedding cache), storage, re-embed command, config/DB model-mismatch check, `/ingest` (with `X-API-Key`), `/documents`, DELETE, folder-ingest script, and a decision on a pre-embedded seed file.
 3. **Retrieval and answers:** the LLM client with retry, backoff and the 120b to 20b fallback, vector search with threshold, grounded prompt, metadata-built citations, `/chat`, a clean hook for the clarify step.
 4. **Guardrails and memory:** the clarify-before-retrieving call (`gpt-oss-20b`, merged with the history rewrite), refusal without an LLM call on weak matches, `clarify` status, session memory, logging with masking.
-5. **Evaluation:** write the question set, build `run_eval.py`, record baseline scores, measure the clarify call's latency, token cost and accuracy, tune chunk size and threshold, prompt-injection test, latency (p50).
+5. **Evaluation:** **at the start, before any evaluation run, Claude reminds the owner to run the evaluation on both `openai/gpt-oss-20b` and `openai/gpt-oss-120b` (set `ANSWER_LLM_MODEL` in `.env` for each run) and to choose the final answer model from the numbers. `gpt-oss-20b` and prompt `answer_v2` are the provisional defaults from Milestone 3 (DECISIONS.md D-036). Evaluation numbers and the demo video must use the final chosen model. The evaluation script prints the active answer model and prompt version at startup and records them in the results file.** Then: write the question set, build `run_eval.py`, record baseline scores, measure the clarify call's latency, token cost and accuracy, tune chunk size and threshold, prompt-injection test, latency (p50).
 6. **UI and packaging:** a working Streamlit UI that shows answers and their sources (polished in Milestone 7), the complete test suite from the Testing standard (the eval run and the final clean-clone test close Milestone 7), README skeleton, architecture diagram check.
 7. **Showcase:**
    - A polished Streamlit UI that shows sources clearly and makes the answered, refused and clarify outcomes visibly different, with loading and friendly error states and the "do not enter personal information" note.

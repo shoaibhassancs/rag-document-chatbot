@@ -1,4 +1,5 @@
 import logging
+import threading
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
@@ -7,9 +8,17 @@ from fastapi.responses import JSONResponse
 
 from app.config import Settings, get_settings
 from app.db import DbStatus, check_database, connect
+from app.generation.answer import Answerer, build_answerer
 from app.health import build_health
-from app.ingest.embedder import Embedder, EmbeddingNotConfigured, build_embedder
+from app.ingest.embedder import (
+    CachingEmbedder,
+    Embedder,
+    EmbeddingNotConfigured,
+    build_embedder,
+)
+from app.routes.chat import router as chat_router
 from app.routes.documents import router as documents_router
+from app.services.chat import ChatService
 from app.services.ingestion import embed_pending, fail_pending
 from app.services.worker import IngestWorker
 from app.startup import prepare_database
@@ -21,8 +30,12 @@ def get_db_checker() -> Callable[[str], DbStatus]:
     return check_database
 
 
-def create_app(embedder_factory: Callable[[Settings], Embedder] = build_embedder) -> FastAPI:
-    """Build the app. `embedder_factory` is replaced by a fake in tests."""
+def create_app(
+    embedder_factory: Callable[[Settings], Embedder] = build_embedder,
+    answerer_factory: Callable[[Settings], Answerer] = build_answerer,
+) -> FastAPI:
+    """Build the app. The two factories are replaced by fakes in tests."""
+    lock = threading.Lock()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -31,15 +44,34 @@ def create_app(embedder_factory: Callable[[Settings], Embedder] = build_embedder
         logging.basicConfig(level=settings.log_level)
         prepare_database(settings)  # migrations, then fail on an embedding config mismatch
         app.state.embedder = None
+        app.state.chat_service = None
+
+        def get_embedder(current: Settings) -> CachingEmbedder:
+            """One embedder (and so one rate limiter) shared by ingestion and chat."""
+            with lock:
+                if app.state.embedder is None:
+                    app.state.embedder = CachingEmbedder(embedder_factory(current))
+                return app.state.embedder
+
+        def chat_service_provider(current: Settings) -> ChatService:
+            with lock:
+                service = app.state.chat_service
+            if service is None:
+                embedder = get_embedder(current)
+                service = ChatService(current, embedder, answerer_factory(current))
+                with lock:
+                    app.state.chat_service = service
+            return service
+
+        app.state.chat_service_provider = chat_service_provider
 
         def run_embedding() -> None:
-            if app.state.embedder is None:
-                try:
-                    app.state.embedder = embedder_factory(settings)
-                except EmbeddingNotConfigured as exc:
-                    fail_pending(settings.database_url, str(exc))
-                    return
-            embed_pending(settings.database_url, app.state.embedder)
+            try:
+                embedder = get_embedder(settings)
+            except EmbeddingNotConfigured as exc:
+                fail_pending(settings.database_url, str(exc))
+                return
+            embed_pending(settings.database_url, embedder)
 
         worker = IngestWorker(run_embedding)
         worker.start()
@@ -55,6 +87,7 @@ def create_app(embedder_factory: Callable[[Settings], Embedder] = build_embedder
 
     app = FastAPI(title="RAG Document Chatbot", lifespan=lifespan)
     app.include_router(documents_router)
+    app.include_router(chat_router)
 
     @app.get("/health")
     def health(

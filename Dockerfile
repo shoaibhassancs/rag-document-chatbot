@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
 COPY scripts ./scripts
+COPY prompts ./prompts
 COPY db/migrations ./db/migrations
 
 RUN useradd --create-home appuser

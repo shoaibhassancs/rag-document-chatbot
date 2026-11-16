@@ -90,3 +90,12 @@ def test_reply_texts_and_llm_client_limits_have_defaults_and_can_be_overridden()
     assert (s.top_k, s.llm_max_retries, s.llm_max_wait_seconds) == (5, 3, 20.0)
     assert (s.prompts_dir / f"{s.answer_prompt_version}.txt").is_file()
     assert Settings(_env_file=None, refusal_message="No.").refusal_message == "No."
+
+
+def test_memory_and_clarify_defaults_and_overrides():
+    s = Settings(_env_file=None)
+    assert (s.history_turns, s.session_ttl_hours, s.history_message_max_chars) == (4, 24, 300)
+    assert s.clarify_enabled is True and s.clarify_prompt_version == "clarify_v1"
+    assert s.llm_role("rewrite").max_output_tokens == 250
+    off = Settings(_env_file=None, clarify_enabled="false", history_turns="2")
+    assert off.clarify_enabled is False and off.history_turns == 2

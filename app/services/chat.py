@@ -1,15 +1,20 @@
 """The question-to-answer pipeline. No FastAPI or Streamlit imports: routes, scripts and tests all
 call `ChatService.chat`, so projects 3 and 6 can reuse it.
 
-Flow (Milestone 3):  prepare query -> embed -> search -> threshold -> answer -> citations.
-The prepare step is the hook where Milestone 4 plugs in the clarify-before-retrieving call; today
-`PassthroughPreparer` uses the user's message as the search query.
+Flow:  remember -> prepare query (clarify or standalone query) -> embed -> search -> threshold ->
+answer -> citations -> save the turn and write the log.
+The prepare step is the clarify-before-retrieving hook (app/services/clarify.py). The answer call
+receives the standalone query, so a follow-up such as "and on Saturdays?" is answered as a full
+question. Memory and logging are best-effort: a failure there never changes the reply.
 
 Statuses: answered | refused | clarify | error.
   refused  no chunk passed the threshold (no LLM call is made), or the model said the chunks do
            not contain the answer. Both give the same fixed message.
-  clarify  produced by the Milestone 4 preparer, never by this milestone's code.
+  clarify  the preparer asked one short clarifying question; nothing is retrieved or answered.
   error    embedding or LLM failure after retries (or a missing key). Friendly message, no trace.
+
+A missing or empty session id is allowed at this level (scripts, other services): the exchange is
+answered without memory and logged with session_id NULL. The HTTP route still requires one.
 """
 
 import logging
@@ -26,6 +31,8 @@ from app.retrieval.search import apply_threshold, search
 
 log = logging.getLogger(__name__)
 
+PURGE_EVERY_SECONDS = 600
+
 
 @dataclass
 class PreparedQuery:
@@ -33,14 +40,20 @@ class PreparedQuery:
 
     search_query: str
     clarifying_question: str | None = None
+    action: str = "passthrough"  # passthrough | search | clarify | search_failed_open
+    usage: dict = field(default_factory=dict)  # the clarify call's model and token use
 
 
 class QueryPreparer(Protocol):
-    def prepare(self, session_id: str, message: str) -> PreparedQuery: ...
+    def prepare(self, session_id: str | None, message: str) -> PreparedQuery: ...
 
 
 class PassthroughPreparer:
-    def prepare(self, session_id: str, message: str) -> PreparedQuery:
+    """Used when the clarify step is switched off or unavailable."""
+
+    prompt_version = None
+
+    def prepare(self, session_id: str | None, message: str) -> PreparedQuery:
         return PreparedQuery(search_query=message)
 
 
@@ -61,6 +74,10 @@ class ChatResult:
     warnings: list[str] = field(default_factory=list)
     error: str | None = None  # short internal reason; never shown to the user
     raw_reply: str | None = None  # the model's raw text, for smoke tests and evaluation only
+    standalone_query: str | None = None  # what was searched (after the clarify step)
+    clarify_action: str | None = None
+    clarify_usage: dict = field(default_factory=dict)
+    used_chunk_ids: list[int] = field(default_factory=list)
 
 
 def _ms(start: float) -> int:
@@ -74,35 +91,84 @@ class ChatService:
         embedder: QueryEmbedder,
         answerer: Answerer,
         preparer: QueryPreparer | None = None,
+        memory=None,
+        chat_logger=None,
     ):
         self._settings = settings
         self._embedder = embedder
         self._answerer = answerer
         self._preparer = preparer or PassthroughPreparer()
+        self._memory = memory  # MemoryStore or None (no memory)
+        self._logger = chat_logger  # ChatLogger or None (no log rows)
+        self._last_purge: float | None = None
         if settings.similarity_threshold is None:
             log.warning("SIMILARITY_THRESHOLD is not set: weak matches are NOT being dropped.")
 
-    def chat(self, session_id: str, message: str) -> ChatResult:
+    def chat(self, session_id: str | None, message: str) -> ChatResult:
         started = time.perf_counter()
         timings: dict[str, int] = {}
-        result = self._run(session_id, message, started, timings)
+        trace: dict = {}
+        result = self._run(session_id, message, timings, trace)
+        prepared: PreparedQuery | None = trace.get("prepared")
+        if prepared is not None:
+            result.standalone_query = prepared.search_query
+            result.clarify_action = prepared.action
+            result.clarify_usage = prepared.usage
         result.timings_ms = {**timings, "total": _ms(started)}
         result.latency_ms = result.timings_ms["total"]
         log.info(
-            "chat status=%s retrieved=%d sources=%d ms=%s warnings=%d error=%s",
+            "chat status=%s clarify=%s retrieved=%d sources=%d ms=%s warnings=%d error=%s",
             result.status,
+            result.clarify_action,
             len(result.retrieved),
             len(result.sources),
             result.timings_ms,
             len(result.warnings),
             result.error,
         )
+        self._remember_and_log(session_id, message, result)
         return result
 
-    def _run(self, session_id: str, message: str, started: float, timings: dict) -> ChatResult:
+    def _remember_and_log(self, session_id: str | None, message: str, result: ChatResult) -> None:
+        """Save the turn and write the log row. Each step may fail without changing the reply."""
+        if self._memory is not None and session_id:
+            try:
+                self._memory.save_turn(session_id, message, result.answer, result.status)
+            except Exception as exc:  # best-effort by design
+                log.warning("memory_write_failed %s", type(exc).__name__)
+            self._purge_if_due()
+        if self._logger is not None:
+            try:
+                self._logger.write(
+                    session_id=session_id or None,
+                    question=message,
+                    result=result,
+                    prompt_version=getattr(self._answerer, "prompt_version", None),
+                    clarify_prompt_version=getattr(self._preparer, "prompt_version", None),
+                )
+            except Exception as exc:
+                log.warning("chat_log_write_failed %s", type(exc).__name__)
+
+    def _purge_if_due(self) -> None:
+        now = time.monotonic()
+        if self._last_purge is not None and now - self._last_purge < PURGE_EVERY_SECONDS:
+            return
+        self._last_purge = now
+        try:
+            removed = self._memory.purge_expired()
+            if removed:
+                log.info("sessions_purged count=%d", removed)
+        except Exception as exc:
+            log.warning("session_purge_failed %s", type(exc).__name__)
+
+    def _run(self, session_id: str | None, message: str, timings: dict, trace: dict) -> ChatResult:
         s = self._settings
         try:
+            t = time.perf_counter()
             prepared = self._preparer.prepare(session_id, message)
+            trace["prepared"] = prepared
+            if prepared.action != "passthrough":
+                timings["clarify"] = _ms(t)
             if prepared.clarifying_question:
                 return ChatResult(prepared.clarifying_question, "clarify")
 
@@ -130,7 +196,7 @@ class ChatService:
                 return ChatResult(s.refusal_message, "refused", retrieved=retrieved)
 
             t = time.perf_counter()
-            answer = self._answerer.answer(message, hits)
+            answer = self._answerer.answer(prepared.search_query, hits)
             timings["llm"] = _ms(t)
         except (EmbeddingError, LLMError, AnswerFormatError) as exc:
             log.error("chat_failed %s: %s", type(exc).__name__, exc)
@@ -153,6 +219,7 @@ class ChatService:
             llm_usage=usage,
             warnings=answer.warnings,
             raw_reply=answer.llm.text,
+            used_chunk_ids=[h.chunk_id for h in answer.used],
         )
 
 

@@ -16,9 +16,13 @@ from app.ingest.embedder import (
     EmbeddingNotConfigured,
     build_embedder,
 )
+from app.masking import install_log_masking
+from app.memory import MemoryStore
 from app.routes.chat import router as chat_router
 from app.routes.documents import router as documents_router
-from app.services.chat import ChatService
+from app.services.chat import ChatService, QueryPreparer
+from app.services.chat_log import ChatLogger
+from app.services.clarify import build_preparer
 from app.services.ingestion import embed_pending, fail_pending
 from app.services.worker import IngestWorker
 from app.startup import prepare_database
@@ -33,8 +37,9 @@ def get_db_checker() -> Callable[[str], DbStatus]:
 def create_app(
     embedder_factory: Callable[[Settings], Embedder] = build_embedder,
     answerer_factory: Callable[[Settings], Answerer] = build_answerer,
+    preparer_factory: Callable[[Settings, MemoryStore], QueryPreparer | None] = build_preparer,
 ) -> FastAPI:
-    """Build the app. The two factories are replaced by fakes in tests."""
+    """Build the app. The three factories are replaced by fakes in tests."""
     lock = threading.Lock()
 
     @asynccontextmanager
@@ -42,6 +47,7 @@ def create_app(
         # Honour dependency overrides so tests can point the whole app at a test database.
         settings = app.dependency_overrides.get(get_settings, get_settings)()
         logging.basicConfig(level=settings.log_level)
+        install_log_masking()  # emails and phone numbers never reach the log output
         prepare_database(settings)  # migrations, then fail on an embedding config mismatch
         app.state.embedder = None
         app.state.chat_service = None
@@ -58,7 +64,17 @@ def create_app(
                 service = app.state.chat_service
             if service is None:
                 embedder = get_embedder(current)
-                service = ChatService(current, embedder, answerer_factory(current))
+                memory = MemoryStore(
+                    current.database_url, current.history_turns, current.session_ttl_hours
+                )
+                service = ChatService(
+                    current,
+                    embedder,
+                    answerer_factory(current),
+                    preparer_factory(current, memory),
+                    memory=memory,
+                    chat_logger=ChatLogger(current.database_url),
+                )
                 with lock:
                     app.state.chat_service = service
             return service

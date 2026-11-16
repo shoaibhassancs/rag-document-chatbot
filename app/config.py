@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     rewrite_llm_model: str = "openai/gpt-oss-20b"
     rewrite_llm_api_key_var: str = "GROQ_API_KEY"
     rewrite_llm_reasoning_effort: str | None = "low"
-    rewrite_llm_max_output_tokens: int = 150
+    rewrite_llm_max_output_tokens: int = 250
 
     # --- Embeddings ---
     embedding_provider: str = "voyage"
@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     # Fixed reply texts. Configurable so a client can change the wording without code changes.
     refusal_message: str = "I couldn't find that in our documents. Please contact the clinic."
     busy_message: str = "The assistant is busy right now. Please try again in a minute."
+
+    # --- Clarify-before-retrieving and session memory (Milestone 4) ---
+    # One small-model call per question rewrites a follow-up into a standalone search query or asks
+    # one clarifying question. False = skip it and search with the user's message as written.
+    clarify_enabled: bool = True
+    clarify_prompt_version: str = "clarify_v1"
+    history_turns: int = 4  # past exchanges given to the clarify call
+    history_message_max_chars: int = 300  # each past message is cut to this length in the prompt
+    session_ttl_hours: int = 24  # a session idle longer than this is forgotten
 
     # A chat question waits at most this long (limiter plus retries) for its Voyage embedding;
     # over the cap the user gets the busy reply. Ingestion keeps its own, longer schedule.

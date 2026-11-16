@@ -168,19 +168,23 @@ def test_a_clarifying_preparer_stops_everything_else(populated, embedder):
     assert answerer.calls == [] and embedder.requests == before
 
 
-def test_the_preparer_decides_what_is_searched_but_the_user_question_is_answered(
+def test_the_preparer_decides_what_is_searched_and_that_standalone_query_is_answered(
     populated, embedder
 ):
+    """Milestone 4 changed this on purpose: the answer call sees the standalone query, so a
+    follow-up is answered as a full question. The user's own words stay in the memory and log."""
+    standalone = chunk_text(populated, "Hours")
+
     class Rewrites:
         def prepare(self, session_id, message):
-            return PreparedQuery(search_query=chunk_text(populated, "Hours"))
+            return PreparedQuery(search_query=standalone)
 
     answerer = FakeAnswerer()
     result = make_service(populated, embedder, answerer, preparer=Rewrites()).chat(
         "s", "and Saturdays?"
     )
     assert result.retrieved[0]["similarity"] == pytest.approx(1.0, abs=1e-4)
-    assert answerer.calls[0][0] == "and Saturdays?"
+    assert answerer.calls[0][0] == standalone and result.standalone_query == standalone
 
 
 def test_the_default_preparer_passes_the_message_through():

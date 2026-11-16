@@ -34,7 +34,7 @@ def test_render_rejects_anything_but_an_integer_within_the_index_limit(bad):
 
 
 def test_migrate_creates_the_schema_with_the_configured_size_and_is_repeatable(settings):
-    assert migrate(settings.database_url, 8) == ["001_init.sql"]
+    assert migrate(settings.database_url, 8) == ["001_init.sql", "002_memory_and_logs.sql"]
     assert migrate(settings.database_url, 8) == []  # nothing to do the second time
     with psycopg.connect(settings.database_url) as conn:
         assert column_dimensions(conn) == 8
@@ -42,6 +42,7 @@ def test_migrate_creates_the_schema_with_the_configured_size_and_is_repeatable(s
             r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")
         }
         assert {"documents", "chunks", "app_meta", "schema_migrations"} <= tables
+        assert {"chat_sessions", "chat_turns", "chat_logs"} <= tables
         index = conn.execute(
             "SELECT indexdef FROM pg_indexes WHERE indexname = 'chunks_embedding_hnsw'"
         ).fetchone()

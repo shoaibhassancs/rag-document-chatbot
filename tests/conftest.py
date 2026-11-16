@@ -79,6 +79,7 @@ def settings(db_url) -> Settings:
         embedding_model="fake-model",
         embedding_dimensions=TEST_DIMENSIONS,
         voyage_max_batch_tokens=400,
+        clarify_enabled=False,  # tests that exercise the clarify step switch it on themselves
     )
 
 

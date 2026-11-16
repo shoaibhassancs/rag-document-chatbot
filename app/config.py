@@ -110,6 +110,17 @@ class Settings(BaseSettings):
     history_message_max_chars: int = 300  # each past message is cut to this length in the prompt
     session_ttl_hours: int = 24  # a session idle longer than this is forgotten
 
+    # --- Evaluation runner (eval/run_eval.py) ---
+    judge_correctness_prompt_version: str = "judge_correctness_v1"
+    judge_faithfulness_prompt_version: str = "judge_faithfulness_v1"
+    judge_combined_prompt_version: str = "judge_combined_v1"  # used with --judge-calls 1
+    # Groq free-plan limits per model (owner's console); the runner paces itself under them.
+    groq_tokens_per_minute: int = 8_000
+    groq_requests_per_minute: int = 30
+    groq_tokens_per_day: int = 200_000
+    groq_requests_per_day: int = 1_000
+    eval_limit_margin: float = 0.9  # use at most this share of each limit
+
     # A chat question waits at most this long (limiter plus retries) for its Voyage embedding;
     # over the cap the user gets the busy reply. Ingestion keeps its own, longer schedule.
     query_embed_max_wait_seconds: float = 20.0

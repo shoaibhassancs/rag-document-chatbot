@@ -337,3 +337,21 @@ Caveats: O09 and O10 were the questions the prompt was tuned on, so passing them
 
 **Verified (commands run this session).** `uv run ruff check .` All checks passed; `uv run ruff format --check .` 99 files already formatted; `uv run pytest -q` 410 passed (was 319). New tests: masking 31, memory 10, clarify 32, flow 17 (mocked Groq and Voyage, real throwaway Postgres), config 1; existing tests changed: conftest turns clarify off for the shared fixture, migration list and tables in `test_startup.py`, one M3 test for D-039.
 **Not verified.** Nothing ran against real Groq, Voyage or the real database. How a real model behaves with `clarify_v1` (over-asking, query quality, JSON-400 on the 20b) is unknown until a live run (M5 measures it). Injection tests prove where untrusted text goes and that code validates the model's output, not how a real model behaves.
+
+## Milestone 5, harness only (Nov 17, 2026, overnight run). Reviewer/assistant defaults; the owner can revert
+
+No evaluation was run, no score exists, no live call was made, the threshold and the model were not touched. The question set is a DRAFT the owner must approve. Built: `eval/run_eval.py`, `eval/judge.py`, `eval/scoring.py`, `eval/pacing.py`, `eval/state.py`, `eval/questions.py`, `eval/fakes.py`, `eval/README.md`, `eval/questions.jsonl`, `prompts/judge_*_v1.txt`, five test files.
+
+- **D-047 (provisional): judge only answered answerable questions** (about 56 calls per pass); everything else is scored by code. A judge failure is `judge_error`: excluded and counted as unjudged, never 0 or 1.
+- **D-048 (provisional): the headline retrieval hit rate is "all expected sources in the top-k"** (stricter); "any" is reported too.
+- **D-049 (provisional): raw results and the hand-check file are git-ignored; summary tables (`eval/results/*.md`) are tracked.**
+- **D-050 (provisional): a live run needs `--confirm-live`, and `--allow-draft` while the questions are DRAFT.** `--dry-run` uses fakes, writes only to a temp directory and labels everything `DRY RUN: FAKE DATA, NOT A RESULT`.
+- **D-051 (provisional): a 10-verdict hand-check file with a fixed seed** for the owner.
+- **D-052 (provisional): eval exchanges go to the real `chat_logs`** with session ids `eval-<run>-<question>-r<n>`.
+- **D-053 (provisional): a run stops on any fallback to another model, a long rate limit or an exhausted daily budget**, so one result never mixes models; state is saved and the same command resumes.
+- **D-054 (provisional): follow-up cases are included** (a `setup` turn then the scored turn). A setup turn that is not answered flags the follow-up as `setup_not_answered`; it is scored as run and listed separately.
+- **D-055 (provisional): faithfulness basis.** Judged against `used_chunk_ids`; if empty or the answer fell back to the top chunk, the top retrieved chunk; the basis is recorded. Limitation (in `eval/README.md`): a model that under-reports used chunks can look unfaithful; the hand-check covers it. The chunk texts are stored in the state file at answer time so the judge phase needs no database.
+- **D-056 (mine, provisional): a third judge prompt, `judge_combined_v1.txt`, for `--judge-calls 1`; Groq limits and the 90% margin are settings** (`GROQ_*`, `EVAL_LIMIT_MARGIN`); the run id is built from the answer model and the two prompt versions (no date), so a resume works across days.
+
+**Verified (this session).** `uv run ruff check .` All checks passed; `uv run ruff format --check .` 114 files already formatted; `uv run pytest -q` 516 passed (was 410; +106 new: questions 16, scoring 12, judge and pacing 43, runner and state 35). Tests use fakes and a fake clock; the shared network guard blocks any real connection.
+**Not verified.** The real command-line entry (`python -m eval.run_eval`) was not executed; only `main()` through the tests. The real pipeline wiring (`RealPipeline`, `build_judge` against Groq) was not run live. The token estimates (800 clarify, 2,100 answer) are estimates. The expected answers were checked against the documents by Claude only; the owner approves them. No score exists.

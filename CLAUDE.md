@@ -22,7 +22,7 @@ At the start of every session, read @SPEC.md and @WORKFLOW.md and follow them. L
 - Threshold calibration (one Voyage request): `uv run python -m scripts.calibrate_threshold`; live smoke test (spends quota): `uv run python -m scripts.smoke_chat [--reasoning-experiment]`
 - Regenerate sample PDFs (dev only): `uv run python -m scripts.make_sample_pdfs`
 - Database tests use a throwaway `ragdb_test` database on the Compose Postgres (skipped if it is down)
-- Planned, not built yet: `eval/run_eval.py` (throttled and resumable)
+- Evaluation harness (DRAFT questions, no scores yet): `uv run python -m eval.run_eval --dry-run` (fakes, output is not a result); a live run needs `--confirm-live --allow-draft` and spends Groq/Voyage quota. See eval/README.md.
 
 ## Rules of thumb
 

@@ -1,0 +1,68 @@
+import pytest
+
+from app.config import Settings
+
+
+def make(**kwargs) -> Settings:
+    # _env_file=None: tests must never read the developer's real .env.
+    return Settings(_env_file=None, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in ("GROQ_API_KEY", "VOYAGE_API_KEY", "GEMINI_API_KEY", "APP_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_defaults_use_groq_models_per_role():
+    s = make()
+    assert s.llm_role("answer").model == "openai/gpt-oss-120b"
+    assert s.llm_role("rewrite").model == "openai/gpt-oss-20b"
+    assert s.llm_role("judge").model == "qwen/qwen3.8-27b"
+    assert s.answer_fallback_model == "openai/gpt-oss-20b"
+
+
+def test_judge_is_a_different_model_from_the_answerer():
+    s = make()
+    assert s.llm_role("judge").model != s.llm_role("answer").model
+
+
+def test_role_key_resolves_from_the_named_setting():
+    s = make(groq_api_key="gsk-test-value")
+    assert s.llm_role("answer").api_key.get_secret_value() == "gsk-test-value"
+
+
+def test_missing_key_is_none_not_an_error():
+    assert make().llm_role("answer").api_key is None
+
+
+def test_roles_can_point_at_another_provider_by_config_only():
+    s = make(
+        gemini_api_key="g-test",
+        judge_llm_provider="gemini",
+        judge_llm_base_url="https://example.invalid/v1",
+        judge_llm_model="some-model",
+        judge_llm_api_key_var="GEMINI_API_KEY",
+    )
+    role = s.llm_role("judge")
+    assert (role.provider, role.model) == ("gemini", "some-model")
+    assert role.api_key.get_secret_value() == "g-test"
+
+
+def test_secrets_never_appear_in_repr_or_str():
+    s = make(groq_api_key="gsk-super-secret", voyage_api_key="pa-super-secret")
+    text = repr(s) + str(s) + repr(s.llm_role("answer"))
+    assert "super-secret" not in text
+
+
+def test_unknown_role_or_key_name_is_rejected():
+    s = make()
+    with pytest.raises(ValueError):
+        s.llm_role("nonsense")
+    with pytest.raises(ValueError):
+        s.api_key_for("DATABASE_URL")
+
+
+def test_embedding_defaults_match_spec():
+    s = make()
+    assert (s.embedding_model, s.embedding_dimensions) == ("voyage-4", 1024)

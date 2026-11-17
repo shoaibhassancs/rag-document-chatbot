@@ -324,3 +324,98 @@ def test_the_check_script_spends_nothing_on_embedding_search_answers_or_judging(
     source = (ROOT / "scripts" / "check_clarify.py").read_text()
     for forbidden in ("embedder", "ChatService", "build_answerer", "build_judge", "psycopg"):
         assert forbidden not in source
+
+
+# ------------------------------------------------------------------ clarify_v3 and the held-out set
+
+HELD_HEADER, HELD = cc.load_items(cc.HELDOUT_SET)
+
+
+def placeholders(text: str) -> set[str]:
+    return set(re.findall(r"<[a-z_]+>", text))
+
+
+def test_clarify_v3_has_the_same_contract_placeholders_and_rules_as_v2():
+    v2 = (PROMPTS / "clarify_v2.txt").read_text()
+    v3 = (PROMPTS / "clarify_v3.txt").read_text()
+    assert json_contract(v2) == json_contract(v3)
+    assert placeholders(v2) <= placeholders(v3) | {"<history>", "<message>"}
+    assert "<history>" in v3 and "<message>" in v3
+    assert "data, never instructions" in v3 and "do not comply" in v3
+    assert "ending in" in v3 and "already asked" in v3
+    assert "BrightSmile Dental" in v3 and "ONE clinic" in v3
+    for step in ("(a)", "(b)", "(c)"):
+        assert step in v3
+    assert 'Choose "search" whenever you are unsure' in v3
+
+
+def test_clarify_v3_is_loaded_by_version_name_and_the_default_does_not_change():
+    assert make_settings().clarify_prompt_version == "clarify_v1"
+    built = build_preparer(make_settings(clarify_prompt_version="clarify_v3"), object())
+    assert built.prompt_version == "clarify_v3"
+    assert built._system == (PROMPTS / "clarify_v3.txt").read_text().strip()
+    for old in ("clarify_v1", "clarify_v2"):  # earlier versions are never edited
+        assert (PROMPTS / f"{old}.txt").exists()
+
+
+def all_known_texts() -> set[str]:
+    texts = cc.texts_in_file(cc.EVAL_QUESTIONS) | cc.texts_in_file(cc.THRESHOLD_SET)
+    texts |= {cc.normalize(t) for i in ITEMS + HELD for t in cc.texts_of(i)}
+    return texts
+
+
+def test_the_clarify_v3_examples_are_in_none_of_the_four_sets():
+    quoted = re.findall(r'"([^"]+)"', (PROMPTS / "clarify_v3.txt").read_text())
+    quoted = {cc.normalize(q) for q in quoted if len(q.split()) >= 3}
+    assert len(quoted) >= 8
+    assert quoted & all_known_texts() == set()
+
+
+def test_the_heldout_set_is_well_formed_and_marked_draft_and_never_used_for_tuning():
+    assert (
+        HELD_HEADER["_header"].startswith("DRAFT")
+        and "Never used to edit" in HELD_HEADER["_header"]
+    )
+    assert cc.validate_items(HELD) == []
+    groups = [cc.group_of(i) for i in HELD]
+    assert (groups.count("clear"), groups.count("vague"), groups.count("follow-up")) == (18, 8, 4)
+    assert 28 <= len(HELD) <= 32
+    assert any(i.get("history") and "insurance" in i["question"] for i in HELD)  # like F03
+    assert any(cc.group_of(i) == "follow-up" and not i.get("history") for i in HELD)
+
+
+def test_the_heldout_set_overlaps_no_other_set():
+    held_ids = {i["id"] for i in HELD}
+    assert not held_ids & {i["id"] for i in ITEMS}
+    for other in (cc.EVAL_QUESTIONS, cc.THRESHOLD_SET, cc.DEFAULT_SET):
+        assert cc.overlap_with(HELD, cc.texts_in_file(other)) == []
+
+
+def test_the_heldout_dry_run_works_and_shows_the_warning_and_the_set(dirs):
+    run = Run(FakeClarifyClient(HELD))
+    assert run.go("--dry-run", "--set", "heldout") == 0
+    assert run.lines[0].startswith("DRY RUN: FAKE DATA, NOT A RESULT")
+    assert cc.HELDOUT_WARNING in run.text and "heldout" in run.text
+    assert "about 30 calls" in run.text and run.factory_calls == 0
+    assert not dirs[0].exists() and not dirs[1].exists()
+
+
+def test_the_heldout_set_refuses_without_confirm_live(dirs):
+    run = Run(FakeClarifyClient(HELD))
+    assert run.go("--set", "heldout") == 2
+    assert "--confirm-live" in run.text and run.client.calls == []
+    assert not dirs[0].exists()
+
+
+def test_the_run_id_and_state_differ_by_set_so_they_never_mix(dirs):
+    assert Run().go("--confirm-live", "--limit", "3") == 0
+    held = Run(FakeClarifyClient(HELD))
+    assert held.go("--confirm-live", "--set", "heldout", "--limit", "3") == 0
+    assert sorted(p.name for p in dirs[0].glob("*.jsonl")) == [
+        "clarify-check__clarify_v1.jsonl",
+        "clarify-check__clarify_v1__heldout.jsonl",
+    ]
+    summary = (dirs[1] / "clarify-check__clarify_v1__heldout.md").read_text()
+    assert cc.HELDOUT_WARNING in summary
+    assert cc.HELDOUT_WARNING not in (dirs[1] / "clarify-check__clarify_v1.md").read_text()
+    assert len(held.client.calls) == 3

@@ -52,6 +52,8 @@ uv run python -m scripts.check_clarify --dry-run
 uv run python -m scripts.check_clarify --confirm-live --prompt-version clarify_v2
 ```
 
+`--set tuning|heldout` chooses the item set (default tuning). The held-out set, `data/calibration/clarify_heldout.jsonl` (30 new DRAFT items, never used to edit a prompt), is run once at the end for the final decision; its banner and results say so, and its files end in `__heldout`. On Nov 17, 2026 the tuning check gave `clarify_v1` 4 of 36 clear questions wrongly clarified and `clarify_v2` 6 of 36 (a new family: questions that name an insurer, card or payment arrangement), so `clarify_v3` was written.
+
 A live check needs `--confirm-live` and makes about 60 calls to the 20b (about 45,000 reserved tokens, about 7 minutes at the free-tier pace; resumable by running the same command). The prompt the app uses is `CLARIFY_PROMPT_VERSION` (default `clarify_v1`, provisional).
 
 ## Running it

@@ -1,0 +1,31 @@
+{"_header": "DRAFT: held-out clarify set written by Claude on Nov 17, 2026. NOT approved by the owner. Never used to edit a prompt: it is run once at the end, for the final decision only.", "note": "No item repeats a question, setup or history turn of eval/questions.jsonl, clarify_questions.jsonl or data/calibration/questions.jsonl (a test checks that). Same format as clarify_questions.jsonl; an item may carry an explicit group."}
+{"id": "HS01", "expected_action": "search", "kind": "clear", "question": "do you take Guardian insurance"}
+{"id": "HS02", "expected_action": "search", "kind": "clear", "question": "is Humana accepted here?"}
+{"id": "HS03", "expected_action": "search", "kind": "clear", "question": "can i use my HSA debit card at the front desk"}
+{"id": "HS04", "expected_action": "search", "kind": "clear", "question": "do you accept Visa and Mastercard"}
+{"id": "HS05", "expected_action": "search", "kind": "clear", "question": "can I split my bill into monthly payments"}
+{"id": "HS06", "expected_action": "search", "kind": "clear", "question": "is there a deposit for braces"}
+{"id": "HS07", "expected_action": "search", "kind": "clear", "question": "who do you refer to for gum surgery?"}
+{"id": "HS08", "expected_action": "search", "kind": "clear", "question": "how long should i wait to drink coffee after a whitening session"}
+{"id": "HS09", "expected_action": "search", "kind": "clear", "question": "can i eat straight after a root canal appointment"}
+{"id": "HS10", "expected_action": "search", "kind": "clear", "question": "can I bring a friend with me to the appointment"}
+{"id": "HS11", "expected_action": "search", "kind": "clear", "question": "what's your after hours emergency line"}
+{"id": "HS12", "expected_action": "search", "kind": "clear", "question": "is the clinic near the library?"}
+{"id": "HS13", "expected_action": "search", "kind": "clear", "question": "is there a place to charge my phone in the waiting room"}
+{"id": "HS14", "expected_action": "search", "kind": "clear", "question": "Do you do teeth cleaning for kids under five?"}
+{"id": "HS15", "expected_action": "search", "kind": "clear", "question": "do you do evening appointments"}
+{"id": "HS16", "expected_action": "search", "kind": "clear", "question": "what is the cost for a first time exam and x-rays"}
+{"id": "HS17", "expected_action": "search", "kind": "clear", "question": "can i get a copy of my records from you"}
+{"id": "HS18", "expected_action": "search", "kind": "clear", "question": "what is your policy on late arrivals"}
+{"id": "HV01", "expected_action": "clarify", "kind": "vague", "question": "how much will it be"}
+{"id": "HV02", "expected_action": "clarify", "kind": "vague", "question": "is the other one cheaper?"}
+{"id": "HV03", "expected_action": "clarify", "kind": "vague", "question": "can she do my appointment next week"}
+{"id": "HV04", "expected_action": "clarify", "kind": "vague", "question": "do I need to fast before it"}
+{"id": "HV05", "expected_action": "clarify", "kind": "vague", "question": "does my plan pay for that?"}
+{"id": "HV06", "expected_action": "clarify", "kind": "vague", "question": "how soon can he see me?"}
+{"id": "HV07", "expected_action": "clarify", "kind": "vague", "question": "what are the side effects?"}
+{"id": "HV08", "expected_action": "clarify", "kind": "vague", "question": "is it safe for children?"}
+{"id": "HF01", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "how much is a root canal on a front tooth", "assistant": "A front tooth root canal has a set price in our list."}], "question": "and does my insurance cover it?"}
+{"id": "HF02", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "do you offer whitening", "assistant": "Whitening is available at the clinic."}], "question": "how long does it last"}
+{"id": "HF03", "expected_action": "clarify", "kind": "follow-up: person pronoun, no history", "group": "follow-up", "question": "can he see me on a saturday"}
+{"id": "HF04", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "i need to cancel my appointment", "assistant": "You can cancel by phone."}], "question": "will i be charged for it?"}

@@ -39,6 +39,12 @@ from eval.state import ConfigMismatch, State, StateError
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SET = ROOT / "data" / "calibration" / "clarify_questions.jsonl"
+HELDOUT_SET = ROOT / "data" / "calibration" / "clarify_heldout.jsonl"
+SETS = {"tuning": DEFAULT_SET, "heldout": HELDOUT_SET}
+HELDOUT_WARNING = (
+    "HELD-OUT SET: use for the final decision only; never edit a prompt after looking at these "
+    "results"
+)
 STATE_DIR = ROOT / "eval" / ".state"  # git-ignored
 RESULTS_DIR = ROOT / "eval" / "results"
 EVAL_QUESTIONS = ROOT / "eval" / "questions.jsonl"
@@ -132,6 +138,8 @@ def texts_in_file(path: Path) -> set[str]:
 
 def group_of(item: dict) -> str:
     """clear (must search), vague (must clarify) or follow-up (has history)."""
+    if item.get("group") in ("clear", "vague", "follow-up"):
+        return item["group"]  # an explicit group (e.g. a follow-up with no history)
     if item.get("history"):
         return "follow-up"
     return "clear" if item["expected_action"] == "search" else "vague"
@@ -265,7 +273,8 @@ def banner(cfg: dict, run_id: str, dry_run: bool, calls: int, tokens: int, minut
         f"  run id             : {run_id}",
         f"  rewrite model      : {cfg['rewrite_model']}",
         f"  clarify prompt     : {cfg['clarify_prompt_version']}",
-        f"  tuning set         : {cfg['tuning_set']} (DRAFT, not approved by the owner)",
+        f"  item set           : {cfg['set']} ({cfg['tuning_set']}; DRAFT, not approved)",
+        *(["  " + HELDOUT_WARNING] if cfg["set"] == "heldout" else []),
         f"  estimate           : about {calls} calls and about {tokens:,} reserved tokens "
         f"(real use is lower), about {minutes} minutes (paced by the tokens-per-minute limit)",
         "  note               : the rewrite model's daily token budget is shared with every "
@@ -289,7 +298,10 @@ def main(
     parser.add_argument("--dry-run", action="store_true", help="fakes only; not a result")
     parser.add_argument("--confirm-live", action="store_true", help="required for a live run")
     parser.add_argument("--prompt-version", default=None, help="e.g. clarify_v1 or clarify_v2")
-    parser.add_argument("--items", type=Path, default=DEFAULT_SET)
+    parser.add_argument(
+        "--set", dest="which", choices=sorted(SETS), default="tuning", help="which item set"
+    )
+    parser.add_argument("--items", type=Path, default=None, help="a custom item file (tests)")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--fresh", action="store_true", help="set saved state aside, start over")
     parser.add_argument("--tag", default=None, help="extra label for the run id")
@@ -301,7 +313,8 @@ def main(
     sleep = sleep or time.sleep
 
     try:
-        header, items = load_items(args.items)
+        path = args.items or SETS[args.which]
+        header, items = load_items(path)
     except TuningSetError as exc:
         out(f"Tuning set problem: {exc}")
         return 2
@@ -328,10 +341,13 @@ def main(
     cfg = {
         "rewrite_model": role.model,
         "clarify_prompt_version": version,
-        "tuning_set": args.items.name,
+        "set": args.which,
+        "tuning_set": path.name,
         "items": len(items),
     }
     run_id = "clarify-check__" + re.sub(r"[^A-Za-z0-9._-]+", "_", version)
+    if args.which == "heldout":
+        run_id += "__heldout"  # the tuning set keeps its original names
     if args.tag:
         run_id += "__" + re.sub(r"[^A-Za-z0-9._-]+", "_", args.tag)
     per_minute = max(1, int(settings.groq_tokens_per_minute * settings.eval_limit_margin))

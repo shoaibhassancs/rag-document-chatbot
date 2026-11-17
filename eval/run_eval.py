@@ -51,6 +51,7 @@ EST_CLARIFY_TOKENS = 800
 EST_ANSWER_TOKENS = 2100
 EST_VOYAGE_TOKENS = 100
 STOP_ERRORS = {"LLMBusyError", "EmbeddingRateLimited"}
+FAITHFULNESS_BASIS = "context_chunks"
 HANDCHECK_SAMPLE = 10
 HANDCHECK_SEED = 5150
 
@@ -83,6 +84,7 @@ def config_snapshot(settings: Settings, questions_path: Path, judge_calls: int) 
             "combined": settings.judge_combined_prompt_version,
         },
         "judge_calls": judge_calls,
+        "faithfulness_basis": FAITHFULNESS_BASIS,
         "similarity_threshold": settings.similarity_threshold,
         "top_k": settings.top_k,
         "embedding_model": settings.embedding_model,
@@ -299,17 +301,25 @@ class Runner:
 
     def faithfulness_basis(self, record: dict) -> dict:
         """Choose and store the chunk texts the faithfulness judge will see (so the judge phase
-        needs no database and a later re-ingest cannot change the basis)."""
-        fell_back = any("no valid used_chunks" in w for w in record["answer_warnings"])
-        if record["used_chunk_ids"] and not fell_back:
-            ids, basis = list(record["used_chunk_ids"]), "used_chunks"
-        elif record["retrieved"]:
-            ids, basis = [record["retrieved"][0]["chunk_id"]], "top_chunk"
-        else:
+        needs no database and a later re-ingest cannot change the basis).
+
+        Basis `context_chunks` (D-080): every chunk that was placed in the answer prompt, i.e. the
+        top-k retrieved chunks whose similarity passed the threshold (the same rule as
+        ChatService: `apply_threshold`). `used_chunk_ids` (the model's own claim) is left in the
+        record unchanged but does not choose the basis. `retrieved` holds similarities rounded to
+        4 places, so a chunk a hair under the threshold can be included here; it can never be
+        dropped."""
+        threshold = self.s.similarity_threshold
+        ids = [
+            r["chunk_id"]
+            for r in record["retrieved"]
+            if threshold is None or r["similarity"] >= threshold
+        ]
+        if not ids:
             return {"faithfulness_basis": "none", "basis_chunks": []}
         texts = self.pipeline.chunk_texts(ids)
         return {
-            "faithfulness_basis": basis,
+            "faithfulness_basis": FAITHFULNESS_BASIS,
             "basis_chunks": [{"chunk_id": i, "text": texts[i]} for i in ids if i in texts],
         }
 
@@ -335,6 +345,7 @@ class Runner:
         blank = {"score": None, "reason": "", "error": None}
         out["correctness"], out["faithfulness"] = dict(blank), dict(blank)
         out["faithfulness"]["basis"] = rec.get("faithfulness_basis")
+        out["faithfulness"]["chunk_ids"] = [c["chunk_id"] for c in rec.get("basis_chunks") or []]
         if not chunks:
             out["faithfulness"]["error"] = "no chunks to judge against"
         try:
@@ -496,7 +507,8 @@ def handcheck_markdown(rows: list[dict], dry_run: bool, cfg: dict | None = None)
             f"- Answer: {r['answer']}",
             f"- Correctness verdict: {c.get('score')} ({c.get('reason')})",
             f"- Faithfulness verdict: {f.get('score')} ({f.get('reason')}); "
-            f"basis: {f.get('basis')}",
+            f"basis: {f.get('basis')}; chunk ids judged: {f.get('chunk_ids')}; "
+            f"used_chunk_ids (the model's claim): {r.get('used_chunk_ids')}",
             "- Your verdict: ",
             "",
         ]
@@ -660,6 +672,12 @@ def main(
         state.start(cfg)
     except (ConfigMismatch, StateError) as exc:
         out(f"\nREFUSING to start: {exc}")
+        if "faithfulness_basis" in str(exc):
+            out(
+                "The saved run judged faithfulness on a different chunk basis (before D-080 it was "
+                "'used_chunks'; now it is 'context_chunks'). Start a new run with a new --tag "
+                "(or --fresh); do not mix the two."
+            )
         return 2
 
     now = datetime.now(UTC)

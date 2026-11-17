@@ -17,7 +17,7 @@ def clean_env(monkeypatch):
 def test_defaults_use_groq_models_per_role():
     s = make()
     assert s.llm_role("answer").model == "openai/gpt-oss-20b"
-    assert s.llm_role("rewrite").model == "openai/gpt-oss-20b"
+    assert s.llm_role("rewrite").model == "openai/gpt-oss-120b"  # D-078
     assert s.llm_role("judge").model == "qwen/qwen3.8-27b"
     assert s.answer_fallback_model == "openai/gpt-oss-120b"
     assert s.answer_prompt_version == "answer_v2"
@@ -95,7 +95,8 @@ def test_reply_texts_and_llm_client_limits_have_defaults_and_can_be_overridden()
 def test_memory_and_clarify_defaults_and_overrides():
     s = Settings(_env_file=None)
     assert (s.history_turns, s.session_ttl_hours, s.history_message_max_chars) == (4, 24, 300)
-    assert s.clarify_enabled is True and s.clarify_prompt_version == "clarify_v1"
+    assert s.clarify_enabled is True and s.clarify_prompt_version == "clarify_v2"
     assert s.llm_role("rewrite").max_output_tokens == 250
+    assert s.llm_role("rewrite").reasoning_effort == "low"
     off = Settings(_env_file=None, clarify_enabled="false", history_turns="2")
     assert off.clarify_enabled is False and off.history_turns == 2

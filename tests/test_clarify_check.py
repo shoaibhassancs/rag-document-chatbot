@@ -147,11 +147,11 @@ def test_the_clarify_v2_examples_are_not_evaluation_or_tuning_questions():
     assert quoted & texts == set()
 
 
-def test_the_clarify_prompt_is_loaded_by_version_name_and_v1_stays_the_default():
-    assert make_settings().clarify_prompt_version == "clarify_v1"
+def test_the_clarify_prompt_is_loaded_by_version_name_and_v2_is_the_default():
+    assert make_settings().clarify_prompt_version == "clarify_v2"  # D-078
     memory = object()
-    v1 = build_preparer(make_settings(), memory)
-    v2 = build_preparer(make_settings(clarify_prompt_version="clarify_v2"), memory)
+    v1 = build_preparer(make_settings(clarify_prompt_version="clarify_v1"), memory)
+    v2 = build_preparer(make_settings(), memory)
     assert v1.prompt_version == "clarify_v1" and v2.prompt_version == "clarify_v2"
     assert (
         v1._system != v2._system and v2._system == (PROMPTS / "clarify_v2.txt").read_text().strip()
@@ -182,7 +182,10 @@ def test_the_judge_defaults_are_the_v2_faithfulness_and_combined_and_v1_correctn
     assert s.judge_correctness_prompt_version == "judge_correctness_v1"
     env = (ROOT / ".env.example").read_text()
     assert "JUDGE_FAITHFULNESS_PROMPT_VERSION=judge_faithfulness_v2" in env
-    assert "CLARIFY_PROMPT_VERSION=clarify_v1" in env
+    assert (
+        "CLARIFY_PROMPT_VERSION=clarify_v2" in env
+        and "REWRITE_LLM_MODEL=openai/gpt-oss-120b" in env
+    )
 
 
 def test_the_judge_banner_and_the_handcheck_file_show_the_prompt_versions(tmp_path, monkeypatch):
@@ -205,7 +208,7 @@ def test_the_judge_banner_and_the_handcheck_file_show_the_prompt_versions(tmp_pa
     assert "judge_faithfulness_v2" in text and "judge_combined_v2" in text
     handcheck = next((tmp_path / "r").glob("*-handcheck.md")).read_text()
     assert "judge_faithfulness_v2" in handcheck and "judge_correctness_v1" in handcheck
-    assert "clarify_v1" in handcheck
+    assert "clarify_v2" in handcheck
 
 
 def test_smoke_results_are_git_ignored():
@@ -287,14 +290,14 @@ def test_the_check_resumes_after_a_stop_and_never_repeats_a_finished_item(dirs):
     assert second.go("--confirm-live") == 0
     assert len(second.client.calls) == len(ITEMS) - 5
     assert not set(first.client.calls) & set(second.client.calls)
-    summary = (dirs[1] / "clarify-check__clarify_v1.md").read_text()
+    summary = (dirs[1] / "clarify-check__clarify_v2.md").read_text()
     assert "None." in summary  # the fake gets everything right
 
 
 def test_a_changed_prompt_version_does_not_mix_into_an_older_state_file(dirs):
     Run().go("--confirm-live", "--limit", "3")
     run = Run()
-    assert run.go("--confirm-live", "--prompt-version", "clarify_v2", "--limit", "3") == 0
+    assert run.go("--confirm-live", "--prompt-version", "clarify_v1", "--limit", "3") == 0
     assert sorted(p.name for p in dirs[0].glob("*.jsonl")) == [
         "clarify-check__clarify_v1.jsonl",
         "clarify-check__clarify_v2.jsonl",
@@ -349,8 +352,8 @@ def test_clarify_v3_has_the_same_contract_placeholders_and_rules_as_v2():
     assert 'Choose "search" whenever you are unsure' in v3
 
 
-def test_clarify_v3_is_loaded_by_version_name_and_the_default_does_not_change():
-    assert make_settings().clarify_prompt_version == "clarify_v1"
+def test_clarify_v3_is_loaded_by_version_name_and_the_default_is_v2():
+    assert make_settings().clarify_prompt_version == "clarify_v2"
     built = build_preparer(make_settings(clarify_prompt_version="clarify_v3"), object())
     assert built.prompt_version == "clarify_v3"
     assert built._system == (PROMPTS / "clarify_v3.txt").read_text().strip()
@@ -412,10 +415,10 @@ def test_the_run_id_and_state_differ_by_set_so_they_never_mix(dirs):
     held = Run(FakeClarifyClient(HELD))
     assert held.go("--confirm-live", "--set", "heldout", "--limit", "3") == 0
     assert sorted(p.name for p in dirs[0].glob("*.jsonl")) == [
-        "clarify-check__clarify_v1.jsonl",
-        "clarify-check__clarify_v1__heldout.jsonl",
+        "clarify-check__clarify_v2.jsonl",
+        "clarify-check__clarify_v2__heldout.jsonl",
     ]
-    summary = (dirs[1] / "clarify-check__clarify_v1__heldout.md").read_text()
+    summary = (dirs[1] / "clarify-check__clarify_v2__heldout.md").read_text()
     assert cc.HELDOUT_WARNING in summary
-    assert cc.HELDOUT_WARNING not in (dirs[1] / "clarify-check__clarify_v1.md").read_text()
+    assert cc.HELDOUT_WARNING not in (dirs[1] / "clarify-check__clarify_v2.md").read_text()
     assert len(held.client.calls) == 3

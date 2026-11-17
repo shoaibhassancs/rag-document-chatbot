@@ -182,7 +182,7 @@ def test_the_startup_banner_names_every_model_prompt_and_the_threshold(dirs):
     for needle in (
         "openai/gpt-oss-20b",
         "answer_v2",
-        "clarify_v1",
+        "clarify_v2",
         "qwen/qwen3.8-27b",
         "judge_correctness_v1",
         "0.4",
@@ -460,27 +460,84 @@ class Basis(FakePipeline):
         return result
 
 
-@pytest.mark.parametrize(
-    "mode, basis",
-    [
-        ("normal", "used_chunks"),
-        ("empty", "top_chunk"),
-        ("fallback", "top_chunk"),
-        ("noretrieved", "none"),
-    ],
-)
-def test_the_faithfulness_basis_is_recorded_per_answer(dirs, mode, basis):
+class Gated(Basis):
+    """Five retrieved chunks; only the first three pass the 0.4 threshold."""
+
+    def ask(self, session_id, message):
+        result = super().ask(session_id, message)
+        if result.status == "answered":
+            sims = [0.8, 0.6, 0.45, 0.39, 0.2]
+            result.retrieved = [
+                {"chunk_id": 500 + n, "file": "f.md", "page": None, "similarity": sim}
+                for n, sim in enumerate(sims)
+            ]
+            result.used_chunk_ids = [500]  # the model claims only the first
+        return result
+
+
+def test_the_judge_sees_every_chunk_in_the_prompt_not_only_the_ones_the_model_claims(dirs):
+    h = Harness(pipeline=Gated(ALL, "normal"))
+    h.run(*LIVE, "--ids", "E01")
+    state = read_state(dirs, the_run_id(h))
+    answer = next(r for r in state.records if r["kind"] == "answer")
+    verdict = next(r for r in state.records if r["kind"] == "judge")
+    assert answer["faithfulness_basis"] == "context_chunks"
+    assert [c["chunk_id"] for c in answer["basis_chunks"]] == [500, 501, 502]  # above 0.4 only
+    assert answer["used_chunk_ids"] == [500]  # the model's own claim is unchanged
+    assert verdict["faithfulness"]["basis"] == "context_chunks"
+    assert verdict["faithfulness"]["chunk_ids"] == [500, 501, 502]
+
+
+@pytest.mark.parametrize("mode", ["normal", "empty", "fallback"])
+def test_the_basis_does_not_depend_on_what_the_model_claims_it_used(dirs, mode):
     h = Harness(pipeline=Basis(ALL, mode))
     h.run(*LIVE, "--ids", "E01")
     state = read_state(dirs, the_run_id(h))
     answer = next(r for r in state.records if r["kind"] == "answer")
     verdict = next(r for r in state.records if r["kind"] == "judge")
-    assert answer["faithfulness_basis"] == basis and verdict["faithfulness"]["basis"] == basis
-    if basis == "none":
-        assert answer["basis_chunks"] == [] and verdict["faithfulness"]["score"] is None
-        assert verdict["faithfulness"]["error"] == "no chunks to judge against"
-    else:
-        assert len(answer["basis_chunks"]) == 1 and verdict["faithfulness"]["score"] == 1
+    assert answer["faithfulness_basis"] == "context_chunks"
+    assert len(answer["basis_chunks"]) == 1 and verdict["faithfulness"]["score"] == 1
+    if mode == "empty":
+        assert answer["used_chunk_ids"] == []
+
+
+def test_no_chunk_in_the_prompt_means_no_basis_and_no_faithfulness_score(dirs):
+    h = Harness(pipeline=Basis(ALL, "noretrieved"))
+    h.run(*LIVE, "--ids", "E01")
+    state = read_state(dirs, the_run_id(h))
+    answer = next(r for r in state.records if r["kind"] == "answer")
+    verdict = next(r for r in state.records if r["kind"] == "judge")
+    assert answer["faithfulness_basis"] == "none" and answer["basis_chunks"] == []
+    assert verdict["faithfulness"]["score"] is None
+    assert verdict["faithfulness"]["error"] == "no chunks to judge against"
+
+
+def test_the_handcheck_file_shows_the_basis_and_the_judged_chunk_ids(dirs):
+    h = Harness(pipeline=Gated(ALL, "normal"))
+    h.run(*LIVE, "--ids", "E01")
+    text = next(dirs[1].glob("*-handcheck.md")).read_text()
+    assert "basis: context_chunks" in text
+    assert "chunk ids judged: [500, 501, 502]" in text and "model's claim): [500]" in text
+
+
+def test_a_state_file_written_under_used_chunks_refuses_to_resume(dirs):
+    h = Harness()
+    h.run(*LIVE, "--ids", "E01")
+    path = next(dirs[0].glob("*.jsonl"))
+    lines = path.read_text().splitlines()
+    header = json.loads(lines[0])
+    del header["header"]["faithfulness_basis"]  # what a pre-D-080 state file looks like
+    path.write_text("\n".join([json.dumps(header)] + lines[1:]) + "\n")
+    again = Harness()
+    assert again.run(*LIVE, "--ids", "E01") == 2
+    assert "REFUSING" in again.text and "faithfulness_basis" in again.text
+    assert "used_chunks" in again.text and "new --tag" in again.text
+
+
+def test_the_dry_run_still_says_fake_data_with_the_new_basis():
+    h = Harness()
+    assert h.run("--dry-run", "--limit", "3") == 0
+    assert "DRY RUN: FAKE DATA, NOT A RESULT" in h.text
 
 
 # ----------------------------------------------------------------------------- judge failures

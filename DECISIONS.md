@@ -401,3 +401,37 @@ Owner-reported run, read by me from the result files (not run by me). Tuning set
 - **D-077 (mine, provisional): held-out set `data/calibration/clarify_heldout.jsonl`** (30 DRAFT items: 18 clear, 8 vague, 4 follow-ups), run once at the end, never used to edit a prompt; no overlap with the other sets (test). `scripts/check_clarify.py --set tuning|heldout`: the run id, state file and results names end in `__heldout` for the held-out set; the banner warns that it is for the final decision only. An item may carry an explicit `group` (used for a follow-up with no history).
 - **Rule (reviewer):** if v3 fails the tuning bar, stop iterating; the owner chooses between v2, v1 and clarify off for the evaluation. No editing a prompt against held-out results.
 
+## Decision: rewrite/clarify step uses the 120b with clarify_v2 (Nov 17, 2026, owner decision, D-078)
+
+**Decision (owner approved):** the rewrite/clarify role uses `openai/gpt-oss-120b` (reasoning effort `low`, output cap 250, as in the runs below) with prompt `clarify_v2`. These are now the defaults in `app/config.py` and `.env.example`. No prompt was edited; the held-out set was not run again. The change supersedes the earlier defaults (20b with `clarify_v1`, D-071 and D-076 said "provisional"); `clarify_v1`, `clarify_v2` and `clarify_v3` still load by name.
+
+**Evidence (owner's live runs, read from the numbers the owner reported; these are tuning checks, NOT evaluation results):**
+
+| Run (clarify_v2 unless noted) | Clear wrongly clarified | Vague caught | Follow-ups right |
+|---|---|---|---|
+| 20b, tuning set (60 items) | 6 of 36 | 16 of 16 | 7 of 8 |
+| 20b, v1 | 4 of 36 | 15 of 16 | 7 of 8 |
+| 20b, v3 (stopped at 35 items, network error) | 8 of 35 | not run | not run |
+| 120b, tuning set | 1 of 36 | 16 of 16 | 6 of 8 |
+| 120b, held-out set (30 items, used once) | 0 of 18 | 8 of 8 | 1 of 4 |
+
+- Pre-set bars: tuning (at most 2 of 36, at least 15 of 16, at least 7 of 8); held-out (at most 1 of 18, at least 7 of 8, at least 3 of 4).
+- 120b + v2 meets the bars on clear and vague questions on both sets and **misses the follow-up bar on both** (7 of 12 combined).
+- **Known limitation (to be reported honestly, not tuned away):** all 5 follow-up misses are the same kind (F03, F05, HF01, HF02, HF04): the topic was clear from the history, and the model asked a narrower question anyway. It over-asks; it does not give a wrong answer.
+- A code guard "never clarify when history exists" was considered and rejected: F06, F07 and F08 have history and correctly expect a clarify.
+- The held-out set is now spent for this prompt and model. The tuning and held-out sets are DRAFT items written by Claude, not the approved evaluation set.
+- **Cost of the change:** the 120b is slower than the 20b per call (to be measured with `scripts/measure_clarify_latency.py`, owner runs it) and the clarify call now uses the 120b's daily quota (200K tokens, separate from the 20b's), which the answer step also uses when the answer model is the 120b. The 20b's quota is no longer used by the clarify call.
+- **Tests changed deliberately:** the config default tests (rewrite model, clarify version), the clarify preparer default test, the eval banner test (clarify_v2 in the banner), and the check_clarify tests that relied on the old default.
+- **Not verified:** latency of the 120b clarify call in the full pipeline (the spec's p50 target of 3 seconds must be re-measured in the evaluation), and the real `.env` (not read: the deny rule blocks it; the owner checks it for `REWRITE_LLM_MODEL` and `CLARIFY_PROMPT_VERSION`).
+
+- **D-079 (verified, owner-reported, Nov 17, 2026): clarify latency, 120b versus 20b.** The owner ran `scripts.measure_clarify_latency --confirm-live` (prompt `clarify_v2`, 10 clear tuning questions per model, 3 s apart, 0 errors): `openai/gpt-oss-20b` median 0.52 s, slowest 0.68 s; `openai/gpt-oss-120b` median 0.59 s, slowest 0.81 s. The 120b adds about 0.07 s at the median and 0.13 s at the worst case on the clarify call alone. One short sample, not an evaluation result. The 120b clarify decision (D-078) stands. An earlier attempt failed with "network error" on all 20 calls because the owner's Mac could not resolve `api.groq.com` (DNS outage); no tokens were spent and it was not a code problem. The command cards for the evaluation are in `handoff/EVAL_COMMANDS.md` (the older card in REPORT_Q17 is marked superseded).
+
+## Smoke2 findings and the faithfulness basis (Nov 17, 2026, owner decision, D-080)
+
+- **The smoke2 run** (3 questions: E01, E02, E03; 20b answers, 120b `clarify_v2`, judge v2 prompts) is **NOT an evaluation result and must never be quoted as one.**
+- **E01** answered, correctness 1, faithfulness 1. **E02** ("where can i lock up my bike") answered, correctness 1, and the cited file was right, but faithfulness 0: the model's `used_chunk_ids` pointed at chunk 37 (address and parking) while the bike-rack sentence is in a later chunk of the same file, and the judge saw only chunk 37. That penalised citation bookkeeping, not grounding.
+- **D-080 (owner approved): the faithfulness basis is `context_chunks`:** every chunk placed in the answer prompt. In the code (`ChatService`) that is the top-k (5) retrieved chunks whose similarity passes the 0.40 threshold (`apply_threshold`); `eval/run_eval.py` rebuilds that list from the recorded `retrieved` similarities (rounded to 4 places, so a chunk a hair under the gate could be included, never dropped). `used_chunk_ids` stays in every record unchanged (the model's own claim). The old `used_chunks` and `top_chunk` bases are removed. The basis, the judged chunk ids and the model's claimed ids are shown in the hand-check file. The config header now carries `faithfulness_basis`, so a state file from before the change refuses to resume with a message that says so; use a new `--tag` (smoke3). The judge-call token reserve already follows the chunk text, so it grows with the extra chunks; the estimates in `handoff/EVAL_COMMANDS.md` were recomputed. Known effect: an answer passes if its facts are anywhere in the prompt, even in a chunk it did not cite.
+- **E03** ("languages spoken?") was **refused** in smoke2: the clarify step rewrote it to "languages spoken", and the right chunk (faq.md chunk 23) ranked first at similarity 0.3597, under the 0.40 gate. In the earlier smoke E03 was answered, so the outcome depends on the rewrite wording. **Owner decision: do NOT change the gate or any prompt because of E03.** E01 to E03 are approved exam questions, so tuning to them would contaminate the exam. If similar refusals appear in the full run they are reported as an honest finding; any later work on the gate uses the calibration data, not the exam questions.
+- **Not verified:** the judge fix for the clinic's name on E03 could not be checked in smoke2 (E03 was refused, so there is no faithfulness verdict). The repeat smoke (smoke3) re-checks it.
+- **Tests changed deliberately:** the tests of the old basis modes (used_chunks, top_chunk) were replaced by tests of `context_chunks`; the README test now looks for `context_chunks` instead of "under-reports".
+

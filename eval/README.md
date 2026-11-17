@@ -39,7 +39,7 @@ An LLM judge (`qwen/qwen3.8-27b`, a different family from the answerer) grades o
 
 ### Faithfulness basis (limitation)
 
-Faithfulness is judged against the chunks in `used_chunk_ids` (the excerpts the answer model said it used). If that list is empty, or the code had to fall back to the top-scoring chunk because the model named no valid excerpt, the top retrieved chunk is used instead. The basis is recorded per answer as `faithfulness_basis` (`used_chunks`, `top_chunk` or `none`). **Limitation:** a model that under-reports the chunks it used can look unfaithful when it is not. The owner's hand-check covers this.
+Faithfulness is judged against every chunk that was placed in the answer prompt (`context_chunks`, owner decision D-080, Nov 17, 2026): the top-5 retrieved chunks whose similarity passed the 0.40 threshold. It is not limited to `used_chunk_ids`, the chunks the model says it used, which stays in each record unchanged for inspection: a correct answer must not fail because the model pointed at a neighbouring chunk of the same file. The basis and the judged chunk ids are recorded per answer and shown in the hand-check file. **Limitation:** an answer is accepted if its facts appear anywhere in the prompt, even in a chunk the model did not cite; a state file written under the earlier basis (`used_chunks`) refuses to resume.
 
 ## Before a full run: check the clarify step
 

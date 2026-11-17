@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # --- Rewrite / clarify role (small model) ---
     rewrite_llm_provider: str = "groq"
     rewrite_llm_base_url: str = "https://api.groq.com/openai/v1"
-    rewrite_llm_model: str = "openai/gpt-oss-20b"
+    rewrite_llm_model: str = "openai/gpt-oss-120b"  # D-078
     rewrite_llm_api_key_var: str = "GROQ_API_KEY"
     rewrite_llm_reasoning_effort: str | None = "low"
     rewrite_llm_max_output_tokens: int = 250
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # One small-model call per question rewrites a follow-up into a standalone search query or asks
     # one clarifying question. False = skip it and search with the user's message as written.
     clarify_enabled: bool = True
-    clarify_prompt_version: str = "clarify_v1"
+    clarify_prompt_version: str = "clarify_v2"  # D-078
     history_turns: int = 4  # past exchanges given to the clarify call
     history_message_max_chars: int = 300  # each past message is cut to this length in the prompt
     session_ttl_hours: int = 24  # a session idle longer than this is forgotten

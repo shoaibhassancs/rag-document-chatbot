@@ -249,7 +249,7 @@ def settings(**kw) -> Settings:
 
 def test_build_preparer_returns_a_working_preparer_when_enabled():
     built = build_preparer(settings(), FakeMemory())
-    assert isinstance(built, ClarifyingPreparer) and built.prompt_version == "clarify_v1"
+    assert isinstance(built, ClarifyingPreparer) and built.prompt_version == "clarify_v2"
 
 
 def test_build_preparer_returns_none_when_clarify_is_off_memory_is_missing_or_no_key(caplog):

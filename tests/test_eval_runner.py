@@ -87,11 +87,60 @@ def test_a_live_run_without_confirm_live_refuses_and_touches_nothing(dirs):
     assert h.factory_calls == 0 and not dirs[0].exists() and not dirs[1].exists()
 
 
-def test_draft_questions_need_allow_draft_for_a_live_run(dirs):
+def draft_copy(tmp_path, header_too=False):
+    """A temp copy of the shipped file with ONE question (E02, not the first) set back to DRAFT."""
+    lines = run_eval.DEFAULT_QUESTIONS.read_text().splitlines()
+    marker = '"status": "APPROVED"'
+    lines = [
+        line.replace(marker, '"status": "DRAFT"') if '"id": "E02"' in line else line
+        for line in lines
+    ]
+    if header_too:
+        lines[0] = lines[0].replace("APPROVED by the owner", "DRAFT: not approved by the owner")
+    path = tmp_path / "questions.jsonl"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_the_shipped_questions_run_live_without_allow_draft(dirs):
+    # Added (INSTRUCTIONS_17): an all-APPROVED file needs --confirm-live and nothing else.
     h = Harness()
-    assert h.run("--confirm-live") == 2
-    assert "DRAFT" in h.text and "--allow-draft" in h.text
-    assert h.factory_calls == 0 and not dirs[0].exists()
+    assert h.run("--confirm-live", "--limit", "2") == 0
+    assert "APPROVED by the owner" in h.lines[0] and "DRAFT" not in h.lines[0]
+    assert h.factory_calls == 1
+
+
+def test_a_question_set_back_to_draft_needs_allow_draft_for_a_live_run(dirs, tmp_path):
+    # Changed deliberately (INSTRUCTIONS_17): this used the shipped file, which was all DRAFT;
+    # it now uses a temp copy with one question set back to DRAFT. The rule is unchanged.
+    path = draft_copy(tmp_path)
+    for extra in ([], ["--limit", "1"], ["--ids", "E01"]):  # a subset cannot hide the DRAFT one
+        h = Harness()
+        assert h.run("--confirm-live", "--questions", str(path), *extra) == 2
+        assert "DRAFT" in h.text and "--allow-draft" in h.text
+        assert h.factory_calls == 0
+    assert not dirs[0].exists()
+    h = Harness()
+    assert h.run("--confirm-live", "--allow-draft", "--questions", str(path), "--limit", "2") == 0
+    assert "DRAFT (not approved by the owner)" in h.lines[0]
+    summary = next(p for p in dirs[1].glob("*.md") if "handcheck" not in p.name).read_text()
+    assert "DRAFT questions: not approved by the owner" in summary
+
+
+def test_a_draft_header_alone_also_needs_allow_draft(dirs, tmp_path):
+    lines = run_eval.DEFAULT_QUESTIONS.read_text().splitlines()
+    lines[0] = lines[0].replace("APPROVED by the owner", "DRAFT: not approved by the owner")
+    path = tmp_path / "q.jsonl"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    h = Harness()
+    assert h.run("--confirm-live", "--questions", str(path)) == 2 and "--allow-draft" in h.text
+
+
+def test_confirm_live_is_still_required_when_everything_is_approved(dirs):
+    h = Harness()
+    assert h.run() == 2
+    assert "REFUSING" in h.text and "--confirm-live" in h.text
+    assert h.factory_calls == 0 and not dirs[0].exists() and not dirs[1].exists()
 
 
 def test_a_missing_key_is_reported_by_setting_name_only(dirs):
@@ -137,7 +186,7 @@ def test_the_startup_banner_names_every_model_prompt_and_the_threshold(dirs):
         "qwen/qwen3.8-27b",
         "judge_correctness_v1",
         "0.4",
-        "DRAFT (not approved by the owner)",
+        "APPROVED by the owner",  # changed deliberately (INSTRUCTIONS_17): was the DRAFT label
         "BOTH gpt-oss-20b and gpt-oss-120b",
         "openai/gpt-oss-120b",  # the fallback
     ):
@@ -153,7 +202,8 @@ def test_the_banner_and_config_are_recorded_in_the_state_and_the_summary(dirs):
     assert state.header["answer_prompt_version"] == "answer_v2"
     summary = (dirs[1] / f"{the_run_id(h)}.md").read_text()
     assert "openai/gpt-oss-20b" in summary and "answer_v2" in summary
-    assert "DRAFT questions: not approved by the owner" in summary
+    # Changed deliberately (INSTRUCTIONS_17): the shipped file is approved, so no DRAFT warning.
+    assert "DRAFT questions" not in summary and "APPROVED by the owner" in summary
 
 
 # ----------------------------------------------------------------------------- dry run
@@ -192,11 +242,12 @@ def test_a_full_run_with_fakes_writes_state_results_and_a_summary(dirs):
     state = read_state(dirs, run_id)
     answers = [r for r in state.records if r["kind"] == "answer"]
     judged = [r for r in state.records if r["kind"] == "judge"]
-    assert len(answers) == 40 and len(judged) == 28
+    # Changed deliberately (INSTRUCTIONS_16): E31 became answerable, so 29 judged, 58 judge calls.
+    assert len(answers) == 40 and len(judged) == 29
     assert all(r["run"] == 1 for r in answers)
-    assert set(h.judge.calls) == {"correctness", "faithfulness"} and len(h.judge.calls) == 56
+    assert set(h.judge.calls) == {"correctness", "faithfulness"} and len(h.judge.calls) == 58
     summary = (dirs[1] / f"{run_id}.md").read_text()
-    assert "| Answer correctness | 100.0% | 28 | 85% | yes |" in summary
+    assert "| Answer correctness | 100.0% | 29 | 85% | yes |" in summary
     assert "| Refusal accuracy | 100.0% | 36 | 95% | yes |" in summary
     raw = (dirs[1] / f"{run_id}.jsonl").read_text().splitlines()
     assert len(raw) == 40 and (dirs[1] / f"{run_id}-handcheck.md").exists()
@@ -499,7 +550,8 @@ def test_daily_usage_is_restored_from_the_state_for_today_only(tmp_path):
 def test_the_plan_estimate_and_helpers():
     cfg = run_eval.config_snapshot(make_settings(), run_eval.DEFAULT_QUESTIONS, 2)
     text = run_eval.estimate_plan(cfg, ALL, 1, 2)
-    assert "44 chat calls" in text and "56 judge calls" in text
+    # Changed deliberately (INSTRUCTIONS_16): 29 answerable questions now, so 58 judge calls.
+    assert "44 chat calls" in text and "58 judge calls" in text
     assert run_eval.slug("openai/gpt-oss-20b") == "openai_gpt-oss-20b"
     assert run_eval.run_id_for(cfg, "t1").endswith("__t1")
     assert run_eval.missing_keys(make_settings()) == []

@@ -1,6 +1,6 @@
 # Evaluation (Milestone 5): harness and rubric
 
-**DRAFT: not approved by the owner.** The harness is built and tested with mocks. The question set in `eval/questions.jsonl` is a draft written by Claude.
+**The question set was approved by the owner on Nov 17, 2026** (all 40 read in a table with the reviewer; mix 29 answerable, 7 out of scope, 4 vague). The harness is built and tested with mocks; it has not run live.
 
 **No score exists yet.** No evaluation has been run. No number may appear in this README, the main README, the case study or a screenshot unless it came from a real run on questions the owner has approved. Anything labelled `DRY RUN: FAKE DATA, NOT A RESULT` is produced by fakes and is never a result.
 
@@ -19,13 +19,13 @@ The evaluation answers the client question "how do you know it works?" with numb
 
 Also reported: errors, answerable questions that got a `clarify` (over-asking), unjudged answers, and the spread over repeated runs.
 
-## The question set (DRAFT)
+## The question set (approved Nov 17, 2026)
 
-`eval/questions.jsonl`, JSON Lines. The first line is a header, `{"_header": "DRAFT: not approved by the owner"}`. Every question has `"status": "DRAFT"` until the owner approves it. Fields: `id`, `category` (`answerable`, `out_of_scope`, `vague`), `question`, `expected_sources` (file names in `data/sample_docs/`), `expected_answer` (short), `expected_status`, `status`, optional `setup` (a first message sent in the same session before the scored question, for follow-ups) and `note`.
+`eval/questions.jsonl`, JSON Lines. The first line is a header whose `_header` starts with "APPROVED by the owner, Nov 17, 2026". Every question has `"status": "APPROVED"`. If the header starts with DRAFT, or any question is back at `"status": "DRAFT"`, the runner treats the whole file as DRAFT (a live run then also needs `--allow-draft`, and the summary says the numbers must not be quoted). Changing a question means setting it back to DRAFT until the owner approves it again. Fields: `id`, `category` (`answerable`, `out_of_scope`, `vague`), `question`, `expected_sources` (file names in `data/sample_docs/`), `expected_answer` (short), `expected_status`, `status`, optional `setup` (a first message sent in the same session before the scored question, for follow-ups) and `note`.
 
-- 40 scored questions: 28 answerable, 8 out of scope, 4 vague. Four of the answerable ones are two-turn follow-ups ("and saturdays?"); their setup turn is sent first and is not scored.
+- 40 scored questions: 29 answerable, 7 out of scope, 4 vague. Four of the answerable ones are two-turn follow-ups ("and saturdays?"); their setup turn is sent first and is not scored.
 - It is separate from the calibration set (`data/calibration/`): no shared questions or wording (a test checks it).
-- Every expected answer was copied from or checked line by line against the sample documents. The owner still has to approve them.
+- Every expected answer was copied from or checked line by line against the sample documents. The owner read and approved them on Nov 17, 2026.
 - A `setup` turn that returns `clarify` or `error` flags the follow-up as `setup_not_answered`. It is still scored as it ran, and the summary lists these separately for the owner to judge.
 
 ## The judge
@@ -45,12 +45,12 @@ Faithfulness is judged against the chunks in `used_chunk_ids` (the excerpts the 
 
 ```
 uv run python -m eval.run_eval --dry-run
-uv run python -m eval.run_eval --confirm-live --allow-draft [--phase answer|judge|all] [--repeat N] [--judge-calls 1|2] [--ids E01,E02] [--limit N]
+uv run python -m eval.run_eval --confirm-live [--phase answer|judge|all] [--repeat N] [--judge-calls 1|2] [--ids E01,E02] [--limit N]
 ```
 
 - `--dry-run` uses fakes (no network, no database), writes only to a temporary directory, never to `eval/results/`, and every output starts with `DRY RUN: FAKE DATA, NOT A RESULT`.
-- A live run needs `--confirm-live`. While the questions are DRAFT it also needs `--allow-draft`. It refuses to start if a needed setting has no value (the message names only the setting, never a value) and it never prints, logs or writes a key.
-- At startup it prints, and writes into the results header: the run id, the active answer model and prompt version, the fallback model, the rewrite model and clarify prompt version, the judge model and prompt versions, the similarity threshold, the embedding model, the question file hash and its DRAFT status. It also prints the Milestone 5 reminder: run the evaluation on BOTH `gpt-oss-20b` and `gpt-oss-120b` (set `ANSWER_LLM_MODEL` in `.env` for each run, and `ANSWER_FALLBACK_MODEL` to the other model) and choose from the numbers.
+- A live run always needs `--confirm-live`. It needs `--allow-draft` as well only if the file has any DRAFT header or question (the check covers the whole file, even with `--ids` or `--limit`). It refuses to start if a needed setting has no value (the message names only the setting, never a value) and it never prints, logs or writes a key.
+- At startup it prints, and writes into the results header: the run id, the active answer model and prompt version, the fallback model, the rewrite model and clarify prompt version, the judge model and prompt versions, the similarity threshold, the embedding model, the question file hash and whether it is DRAFT or APPROVED. It also prints the Milestone 5 reminder: run the evaluation on BOTH `gpt-oss-20b` and `gpt-oss-120b` (set `ANSWER_LLM_MODEL` in `.env` for each run, and `ANSWER_FALLBACK_MODEL` to the other model) and choose from the numbers.
 - **Resumable.** Progress is saved after every unit in `eval/.state/<run_id>.jsonl` (git-ignored). Run the same command again to continue, across days. A different model, prompt, threshold or question file refuses to resume unless `--force-config`; `--fresh` sets the old state aside and starts over.
 - **A run stops** (state saved) if any call falls back to another model, hits a long rate limit (a daily cap) or the daily budget would be exceeded, so one result never mixes two models.
 - Output: `eval/results/<run_id>.jsonl` (raw per-question rows, git-ignored), `eval/results/<run_id>.md` (the summary table; tracked, so before and after tables can be quoted), `eval/results/<run_id>-handcheck.md` (git-ignored).
@@ -61,7 +61,7 @@ uv run python -m eval.run_eval --confirm-live --allow-draft [--phase answer|judg
 Groq's free plan allows 30 requests per minute, 8,000 tokens per minute, 1,000 requests per day and 200,000 tokens per day, per model. The runner paces itself at 90% of each limit and reserves each call's prompt estimate plus its output cap, the same way Groq does at admission.
 
 - On the 20b, one question reserves about 2,900 tokens across the clarify call and the answer call, because both use the same quota (about 800 and 2,100). That is about two questions a minute, and a full pass of 44 chat calls (40 questions and 4 setup turns) is about 130,000 tokens: **about one day of that model's token budget**. The 120b and 20b answer passes have separate quotas and can share a day.
-- The judge is on its own model (`qwen/qwen3.8-27b`) with its own quota: about 56 calls for 28 answers, roughly half of its daily budget.
+- The judge is on its own model (`qwen/qwen3.8-27b`) with its own quota: about 58 calls for 29 answers, roughly half of its daily budget.
 - Voyage (3 requests and 10,000 tokens per minute) is used for one tiny query embedding per question; the existing limiter and query cache apply, and the pace keeps it under 3 requests a minute.
 - These are estimates, not measurements.
 

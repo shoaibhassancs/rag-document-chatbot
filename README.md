@@ -103,7 +103,7 @@ All settings live in `.env` (git-ignored); `.env.example` lists every name with 
 
 ## Evaluation
 
-TBD: from the real evaluation. The harness, rubric and a DRAFT question set are in `eval/`; no evaluation has been run and no score exists. Retrieval hit rate: TBD: from the real evaluation. Faithfulness: TBD: from the real evaluation. Answer correctness: TBD: from the real evaluation. Refusal accuracy: TBD: from the real evaluation. Latency: TBD: from the real evaluation.
+TBD: from the real evaluation. The harness, rubric and the owner-approved question set are in `eval/`; no evaluation has been run and no score exists. Retrieval hit rate: TBD: from the real evaluation. Faithfulness: TBD: from the real evaluation. Answer correctness: TBD: from the real evaluation. Refusal accuracy: TBD: from the real evaluation. Latency: TBD: from the real evaluation.
 
 ## Tests
 

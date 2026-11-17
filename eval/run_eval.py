@@ -1,4 +1,4 @@
-"""The evaluation runner (Milestone 5 harness; DRAFT questions; no scores exist yet).
+"""The evaluation runner (Milestone 5 harness; questions approved Nov 17, 2026; no scores yet).
 
   uv run python -m eval.run_eval --dry-run                    # fakes only, output is NOT a result
   uv run python -m eval.run_eval --confirm-live [--allow-draft] [--phase answer|judge|all] ...
@@ -113,7 +113,7 @@ def banner(cfg: dict, run_id: str, dry_run: bool, draft: bool, repeat: int) -> s
         f"  similarity threshold: {cfg['similarity_threshold']}  top_k: {cfg['top_k']}",
         f"  embedding model    : {cfg['embedding_model']}",
         f"  questions          : {cfg['question_file']} sha256 {cfg['questions_sha256'][:12]}"
-        f"  {'DRAFT (not approved by the owner)' if draft else 'approved'}",
+        f"  {'DRAFT (not approved by the owner)' if draft else 'APPROVED by the owner'}",
         f"  repeat {repeat}, judge calls per answer {cfg['judge_calls']}",
         f"  {M5_REMINDER}",
     ]
@@ -585,6 +585,9 @@ def main(
     if problems:
         out("Question file problems:\n  " + "\n  ".join(problems))
         return 2
+    # Judged on the WHOLE file, before --ids or --limit pick a subset, so choosing only approved
+    # questions cannot hide a DRAFT header or a DRAFT question elsewhere in the file.
+    draft = is_draft(header, questions)
     if args.ids:
         wanted = [i.strip() for i in args.ids.split(",") if i.strip()]
         questions = [q for q in questions if q["id"] in wanted]
@@ -594,7 +597,6 @@ def main(
         out("Nothing to run (no questions selected, or --repeat is below 1).")
         return 2
 
-    draft = is_draft(header, questions)
     cfg = config_snapshot(settings, args.questions, args.judge_calls)
     run_id = run_id_for(cfg, args.tag)
     banner_text = banner(cfg, run_id, args.dry_run, draft, args.repeat)

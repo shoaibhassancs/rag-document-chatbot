@@ -75,8 +75,10 @@ def test_compose_interpolation_cannot_break_a_plain_compose_up():
     assert 'name = "streamlit"\nversion = "1.66.0"' in (ROOT / "uv.lock").read_text()
 
 
-def test_the_ui_dockerfile_is_a_marked_draft_with_a_required_version_argument():
-    assert UI_DOCKERFILE.startswith("# UNVERIFIED DRAFT")
+def test_the_ui_dockerfile_is_marked_partly_verified_with_a_required_version_argument():
+    # Changed deliberately (INSTRUCTIONS_25): the owner built it and saw 1.66.0.
+    assert UI_DOCKERFILE.startswith("# PARTLY VERIFIED")
+    assert "never been started as a container" in UI_DOCKERFILE and "uv.lock" in UI_DOCKERFILE
     assert re.search(r"^ARG STREAMLIT_VERSION$", UI_DOCKERFILE, re.MULTILINE)  # no default value
     assert 'test -n "$STREAMLIT_VERSION"' in UI_DOCKERFILE
     assert "streamlit==${STREAMLIT_VERSION}" in UI_DOCKERFILE and "COPY .env" not in UI_DOCKERFILE

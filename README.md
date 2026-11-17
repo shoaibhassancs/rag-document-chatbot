@@ -89,7 +89,14 @@ curl -s http://127.0.0.1:8010/health
 
 ## The UI
 
-Start it from the project root with the API running: `uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510`. The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run and checked by the owner in a browser on Nov 17, 2026. TBD: screenshots. The Docker images are not verified: the UI image (`docker compose --profile ui up --build`) has never been built or started, and the API image has not been rebuilt and re-checked since the latest changes (TBD in Milestone 7). The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+Run it locally with the API running. A plain `uv sync` does not install Streamlit, so install the UI group first, then start the page from the project root:
+
+```bash
+uv sync --group ui
+uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510
+```
+
+The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run with `streamlit run` and tested in a browser by the owner on Nov 17, 2026. TBD: screenshots. Docker, checked by the owner on Nov 17, 2026: the API image builds (`docker compose build api`, 524 MB, production dependencies only, no Streamlit by design); the UI image builds (`docker compose --profile ui build ui`) and reports Streamlit 1.66.0; `docker compose --profile ui config` parses. Not verified: the UI image has never been started as a container (the `ui` profile has not been run with `up`), and it installs Streamlit with pip, so its dependencies do not come from `uv.lock` and the image is not fully reproducible. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
 
 ## Configuration
 

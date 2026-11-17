@@ -218,16 +218,22 @@ def test_seed_round_trip_restores_documents_chunks_and_vectors(ingested, tmp_pat
     size = write_seed(built, path)
     assert size > 0 and path.read_bytes()[:2] == b"\x1f\x8b"  # gzip
 
-    original = {r[0]: r[1] for r in psycopg.connect(settings.database_url).execute(
-        "SELECT chunk_hash, embedding::text FROM chunks")}  # fmt: skip
+    # The connection is closed explicitly: an unclosed one stays "idle in transaction" until the
+    # garbage collector runs and then blocks the schema drop in reset_database (a hang, Nov 17).
+    with psycopg.connect(settings.database_url) as conn:
+        original = {
+            r[0]: r[1] for r in conn.execute("SELECT chunk_hash, embedding::text FROM chunks")
+        }
     reset_database(settings)
     with psycopg.connect(settings.database_url) as conn:
         counts = load_seed(conn, read_seed(path), settings)
         conn.commit()
     assert counts == {"loaded": 2, "updated": 0, "skipped": 0}
     assert scalar(settings, "SELECT count(*) FROM documents WHERE status = 'ready'") == 2
-    restored = {r[0]: r[1] for r in psycopg.connect(settings.database_url).execute(
-        "SELECT chunk_hash, embedding::text FROM chunks")}  # fmt: skip
+    with psycopg.connect(settings.database_url) as conn:
+        restored = {
+            r[0]: r[1] for r in conn.execute("SELECT chunk_hash, embedding::text FROM chunks")
+        }
     assert restored.keys() == original.keys()
     assert all(
         all(

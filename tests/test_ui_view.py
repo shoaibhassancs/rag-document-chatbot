@@ -190,35 +190,46 @@ def test_the_privacy_note_asks_for_no_personal_information():
 # ----------------------------------------------------------------------------- documents
 
 
-def test_document_lines_show_status_and_progress():
+def test_document_lines_show_name_and_type_and_only_say_more_when_not_ready():
+    # Changed deliberately (Nov 17, 2026): the old line also said "ready, 3 chunks" for every
+    # document. Now a ready document is just its name and type.
+    ready = {"name": "a.pdf", "source_type": "pdf", "status": "ready", "chunks": 3}
+    assert view.format_document(ready) == "a.pdf [pdf]"
+    ingesting = {"name": "a.pdf", "source_type": "pdf", "status": "ingesting"}
     assert (
-        view.format_document(
-            {
-                "name": "a.pdf",
-                "source_type": "pdf",
-                "status": "ready",
-                "chunks": 3,
-                "chunks_done": 3,
-            }
-        )
-        == "a.pdf [pdf] - ready, 3 chunks"
-    )
-    assert (
-        view.format_document(
-            {
-                "name": "a.pdf",
-                "source_type": "pdf",
-                "status": "ingesting",
-                "chunks": 4,
-                "chunks_done": 1,
-            }
-        )
-        == "a.pdf [pdf] - ingesting, embedding 1/4"
+        view.format_document({**ingesting, "chunks": 4, "chunks_done": 1})
+        == "a.pdf [pdf] - embedding 1/4"
     )
     failed = view.format_document(
         {"name": "a.pdf", "source_type": "pdf", "status": "failed", "chunks": 4, "error": "x" * 500}
     )
-    assert failed.startswith("a.pdf [pdf] - failed") and len(failed) < 200
+    assert failed.startswith("a.pdf [pdf] - failed (x") and len(failed) < 200
+    no_reason = {"name": "a.pdf", "source_type": "pdf", "status": "failed"}
+    assert view.format_document(no_reason) == "a.pdf [pdf] - failed (unknown reason)"
+    assert view.format_document({**ingesting, "status": "queued"}) == "a.pdf [pdf] - queued"
+
+
+def test_the_documents_sentence_for_none_one_and_many():
+    assert view.documents_sentence(0) == "No documents yet."
+    assert view.documents_sentence(1) == "The assistant answers only from this clinic document."
+    assert view.documents_sentence(2) == "The assistant answers only from these 2 clinic documents."
+    assert "29 clinic documents" in view.documents_sentence(29)
+
+
+def test_the_expander_title_has_the_count():
+    assert view.documents_title(1) == "See the 1 document"
+    assert view.documents_title(29) == "See the 29 documents"
+
+
+def test_the_picker_label_escapes_markdown_and_html_in_document_names():
+    label = view.picker_label(
+        {"name": "![x](http://e.invalid/a.png) <img src=x>.md", "source_type": "md"}
+    )
+    # every markdown/HTML special character is preceded by a backslash (none is bare)
+    assert re.search(r"(?<!\\)[<>\[\]()!`*_]", label) is None
+    assert "\x07" not in view.picker_label({"name": "a\x07b.md", "source_type": "markdown"})
+    assert "\n" not in view.picker_label({"name": "a\nb.md", "source_type": "markdown"})
+    assert view.picker_label({"name": "faq", "source_type": "markdown"}) == "faq \\[markdown\\]"
 
 
 def test_ingest_lines_explain_each_result_in_plain_words():

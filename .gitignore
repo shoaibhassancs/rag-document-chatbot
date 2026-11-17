@@ -53,3 +53,6 @@ handoff/
 
 # Local Claude Code permission rules (never committed)
 .claude/settings.local.json
+
+# Handbook notes exports delivered by the chat assistant (local only, never committed)
+Claude outputs/

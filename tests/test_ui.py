@@ -1,6 +1,6 @@
-"""AppTest tests for the Streamlit page. UNVERIFIED: written while Streamlit was not installed, so
-they have never run. They are skipped until Streamlit is installed (a morning item); when they run
-for the first time, expect to adjust details to the installed Streamlit version.
+"""AppTest tests for the Streamlit page (they ran for the first time on Streamlit 1.66.0, Nov 17,
+2026; they are skipped when Streamlit is not installed). AppTest starts from the project root, so
+it cannot see how `streamlit run` sets the import path: see tests/test_ui_import_path.py.
 
 The HTTP API is replaced by a mock transport; `ui.api_client.client_from_env` is monkeypatched, so
 no network is used.
@@ -211,14 +211,71 @@ def test_a_blank_message_is_not_sent(api):
 
 
 def test_delete_needs_the_confirm_box_then_calls_delete_with_the_key_header(api):
+    # Changed deliberately (Nov 17, 2026): there is now one picker, one tick box and one Delete
+    # button for the whole list, not one set per document. Same rule: no tick, no request.
     at = AppTest.from_file(APP, default_timeout=15).run()
-    delete = next(b for b in at.sidebar.button if b.key == f"delete-{DOC_ID}")
-    delete.click().run()
+    at.sidebar.button(key="delete-doc").click().run()
     assert api.sent("DELETE", f"/documents/{DOC_ID}") == []  # not confirmed yet
-    next(c for c in at.sidebar.checkbox if c.key == f"confirm-{DOC_ID}").check().run()
-    next(b for b in at.sidebar.button if b.key == f"delete-{DOC_ID}").click().run()
+    assert any("Tick the box" in w.value for w in at.sidebar.warning)
+    at.sidebar.checkbox(key=f"confirm-{DOC_ID}").check().run()
+    at.sidebar.button(key="delete-doc").click().run()
     calls = api.sent("DELETE", f"/documents/{DOC_ID}")
     assert len(calls) == 1 and calls[0].headers["x-api-key"] == KEY
+
+
+def test_the_sidebar_says_how_many_documents_the_assistant_uses(api):
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    assert any("only from this clinic document" in c.value for c in at.sidebar.caption)
+    api.documents = api.documents * 3
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    assert any("only from these 3 clinic documents" in c.value for c in at.sidebar.caption)
+    api.documents = []
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    assert any(c.value == "No documents yet." for c in at.sidebar.caption)
+
+
+def test_the_document_list_is_in_a_collapsed_expander_with_no_delete_controls(api):
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    expanders = {e.label: e for e in at.sidebar.expander}
+    assert set(expanders) == {"See the 1 document", "Manage documents"}
+    assert not any(e.proto.expanded for e in expanders.values())  # both collapsed
+    listing = expanders["See the 1 document"]
+    assert [t.value for t in listing.text] == ["faq.md [markdown]"]
+    assert not listing.button and not listing.checkbox and not listing.selectbox
+    assert len([b for b in at.sidebar.button if b.label == "Delete"]) == 1  # not one per document
+    assert len(at.sidebar.checkbox) == 1 and len(at.sidebar.selectbox) == 1
+
+
+def test_many_documents_still_have_one_delete_button_and_one_tick_box(api):
+    api.documents = [
+        {**api.documents[0], "id": str(uuid4()), "name": f"doc-{i}.md"} for i in range(29)
+    ]
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    assert len([b for b in at.sidebar.button if b.label == "Delete"]) == 1
+    assert len(at.sidebar.checkbox) == 1
+    assert any(e.label == "See the 29 documents" for e in at.sidebar.expander)
+
+
+def test_the_picker_deletes_the_document_that_is_picked(api):
+    other = str(uuid4())
+    api.documents.append({**api.documents[0], "id": other, "name": "second.md"})
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    at.sidebar.selectbox(key="delete-pick").select(other).run()
+    at.sidebar.checkbox(key=f"confirm-{other}").check().run()
+    at.sidebar.button(key="delete-doc").click().run()
+    assert len(api.sent("DELETE", f"/documents/{other}")) == 1
+    assert api.sent("DELETE", f"/documents/{DOC_ID}") == []
+
+
+def test_a_hostile_document_name_stays_plain_text(api):
+    api.documents[0]["name"] = EVIL
+    at = AppTest.from_file(APP, default_timeout=15).run()
+    assert not at.exception
+    assert any("example.invalid" in t.value for t in at.sidebar.text)  # shown as characters
+    assert not any("example.invalid" in m.value for m in at.markdown)  # never parsed as markdown
+    assert not at.sidebar.markdown or all(
+        "example.invalid" not in m.value for m in at.sidebar.markdown
+    )
 
 
 def test_adding_a_web_page_calls_ingest_with_the_key_header(api):

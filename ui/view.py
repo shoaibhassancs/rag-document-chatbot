@@ -24,6 +24,7 @@ PRIVACY_NOTE = (
     "email addresses or health details."
 )
 SCOPE_NOTE = "Answers come only from the clinic's documents."
+NO_DOCUMENTS = "No documents yet."
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -158,23 +159,48 @@ def render_blocks(outcome: ChatOutcome) -> list[Block]:
     return blocks
 
 
+def documents_sentence(count: int) -> str:
+    """The one plain sentence at the top of the sidebar."""
+    if count <= 0:
+        return NO_DOCUMENTS
+    if count == 1:
+        return "The assistant answers only from this clinic document."
+    return f"The assistant answers only from these {count} clinic documents."
+
+
+def documents_title(count: int) -> str:
+    """Title of the collapsed list, with the count."""
+    return f"See the {count} document" + ("" if count == 1 else "s")
+
+
 def format_document(doc: dict) -> str:
-    """One plain-text line for the document list."""
+    """One plain-text line per document: name and type, plus progress or the failure reason
+    when the document is not ready."""
     name = sanitize(str(doc.get("name") or "unnamed"))
     kind = sanitize(str(doc.get("source_type") or "?"))
     status = str(doc.get("status") or "?")
+    line = f"{name} [{kind}]"
     chunks, done = doc.get("chunks"), doc.get("chunks_done")
+    if status == "ready":
+        return line
     if status == "ingesting" and isinstance(chunks, int) and isinstance(done, int):
-        detail = f"embedding {done}/{chunks}"
-    elif isinstance(chunks, int):
-        detail = f"{chunks} chunks"
-    else:
-        detail = ""
-    line = f"{name} [{kind}] - {status}" + (f", {detail}" if detail else "")
-    error = doc.get("error")
-    if status == "failed" and isinstance(error, str) and error:
-        line += f" ({sanitize(error)[:120]})"
-    return line
+        return f"{line} - embedding {done}/{chunks}"
+    if status == "failed":
+        error = doc.get("error")
+        reason = sanitize(error)[:120] if isinstance(error, str) and error else "unknown reason"
+        return f"{line} - failed ({reason})"
+    return f"{line} - {sanitize(status)}"
+
+
+_MARKDOWN_CHARS = re.compile(r"([\\`*_{}\[\]()#+\-.!|~<>$:])")
+
+
+def picker_label(doc: dict) -> str:
+    """Label for the delete picker. A select box may render its labels as markdown, so every
+    markdown character in a document name is escaped; it stays readable text."""
+    name = sanitize(str(doc.get("name") or "unnamed")).replace("\n", " ")
+    kind = sanitize(str(doc.get("source_type") or "?")).replace("\n", " ")
+    return _MARKDOWN_CHARS.sub(r"\\\1", f"{name} [{kind}]")
 
 
 def ingest_lines(results: list[dict]) -> list[str]:

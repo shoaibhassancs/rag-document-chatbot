@@ -86,7 +86,7 @@ curl -s http://127.0.0.1:8010/health
 
 ## The UI
 
-TBD: start commands and screenshots after Streamlit is installed, the image is built and the page has been run. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+Start it from the project root with the API running: `uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510`. TBD: screenshots and the Docker image, after the image is built and the page is checked again. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
 
 ## Configuration
 

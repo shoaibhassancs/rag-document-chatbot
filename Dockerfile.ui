@@ -1,8 +1,8 @@
-# UNVERIFIED DRAFT (Milestone 6, written overnight): this image has never been built. Streamlit was
-# not installed or locked when this was written, so its version is a REQUIRED build argument with no
-# default; the build stops if it is missing. The owner approves a pinned version (at least two weeks
-# old, checked on PyPI) in the morning. Streamlit's own dependencies are NOT locked yet (they are not
-# in uv.lock), so this image is not reproducible until Streamlit is added to the lock.
+# UNVERIFIED DRAFT (Milestone 6, written overnight): this image has never been built. Its Streamlit
+# version is a REQUIRED build argument with no default; the build stops if it is missing. The owner
+# approved 1.66.0 (see .env.example) and it is now in the `ui` group of uv.lock, but this image still
+# installs with pip, so Streamlit's own dependencies are NOT taken from the lock here: the image is
+# not reproducible until it installs from uv.lock (not done).
 #
 #   docker build -f Dockerfile.ui --build-arg STREAMLIT_VERSION=<version> -t rag-ui .
 FROM python:3.12-slim

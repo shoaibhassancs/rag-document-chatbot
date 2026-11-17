@@ -63,7 +63,7 @@ def db_url():
             f"Postgres is not reachable ({type(exc).__name__}); run `docker compose up -d db`"
         )
     with psycopg.connect(test_url, autocommit=True) as conn:
-        conn.execute("DROP SCHEMA public CASCADE")
+        conn.execute("DROP SCHEMA IF EXISTS public CASCADE")  # also fine after an interrupted run
         conn.execute("CREATE SCHEMA public")
     return test_url
 

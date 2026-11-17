@@ -1,10 +1,42 @@
 # RAG Document Chatbot: Handbook Notes
 
 **Project 1 of 6 · "BrightSmile Dental" (fictional clinic)**
-**Version 9 · Last updated:** 16 November 2026
-**Status:** Milestones 1 and 2 are built, reviewed and pushed to a public GitHub repo. Milestone 3 (retrieval and answers) is built (300 passing tests) and has had its first live run: the threshold is 0.40 (provisional), the full path works in about 1.8 seconds, the smoke run found that the 120b answer model answered two near-miss questions it should refuse, and a three-way comparison on all 28 questions (D21) then favoured prompt v2 on the 20b. The model choice is provisional until a stability check and the Milestone 5 evaluation. Keys for Groq and Voyage are in `.env`.
+**Version 14 · Last updated:** 17 November 2026
+**Status:** Milestones 1 and 2 are pushed. Milestones 3 to 6 are built and pushed to the public repo (M3, M4, the M5 harness and M6, plus a notes commit). Summaries for M1 to M4 are approved in `NOTES.md`; M5 and M6 have none yet, on purpose. No evaluation has been run and no score exists. Streamlit is not installed, so the UI page and its 16 page tests have never run; neither Docker image has been built; migration 002 is not applied to the real database. The threshold is 0.40 and the 20b answer model is provisional until the two-model evaluation. Keys for Groq and Voyage are in `.env`.
 
 ---
+
+## What changed in versions 13 and 14
+
+- **Milestone 4 and the Milestone 5 harness are committed** (860e03d, 45966b5). The harness is the runner, the judge and 40 DRAFT questions; no evaluation was run.
+- **Milestone 6 is built without Streamlit** (option B, 15573f2): an HTTP client, a display layer and a thin page; answers are drawn as plain text so a model answer can never load an outside image or link. 631 tests passed, 1 skipped (the 16 page tests). The page has never run.
+- **Claude Code hit its 5-hour limit** at 2:55 AM and waited until you typed `continue` at 6:21 AM. It cannot restart itself, and I cannot type into VS Code (click-only).
+- **Milestone 3 and 4 summaries approved by you** (`NOTES.md`, commit cf5b963). All commits were pushed. My secret checks over the whole range were clean; I never read `.env`.
+- **Notes cleanup:** two older copies of this file (v9 and v12) had been committed to the public repo by mistake; they are being removed going forward and `Claude outputs/` is ignored. This single file replaces both.
+
+## What changed in version 12
+
+- **The overnight channel worked** (D23, D24): Claude Code and I exchanged seven instruction files; it built and committed Milestone 3 and built Milestone 4 under my review.
+- **Milestone 3 is committed locally** (commit 48002b2, 37 files, not pushed). It took two secret-scan stops, both on made-up test values that looked like keys; they were renamed and a stricter scan pattern was adopted.
+- **Milestone 4 is built** (410 tests pass, ruff clean): clarify merged with the history rewrite, session memory, logging with masking. I told Claude Code to commit it; the screen showed it done, but I could not read the commit hash because the connection dropped.
+- **The M3 summary is in NOTES.md**, marked "approved by the reviewer on the owner's behalf, owner to confirm". The M4 summary is a draft in `handoff/SUMMARY_M4.md`, not in NOTES.md.
+- **The link dropped** while Claude Code was writing the Milestone 5 plan. Probably the Mac slept or the lid closed. I can no longer read your files or see your screen.
+- **Two corrections to my own earlier claims:** I said I could click Allow on Claude Code's permission prompts, but a safety check blocked it, so you approved them yourself. And I said the 20b gave no quota saving, which was Claude Code's claim that I corrected: both models have the same free limits.
+
+## What changed in version 11
+
+- **You confirmed the overnight plan** (D22): the M3 wrap-up, M4, the parts of M5 that need no input (script, judge prompts, rubric, DRAFT questions, mocked tests; no live run), then M6. M5's live part and M7 wait for you.
+- **A limit I hit:** VS Code can only be given to me click-only. I can see it and click, but not type or paste. So I cannot paste prompts into Claude Code.
+- **The workaround (D23):** Claude Code and I pass files through a `handoff/` folder in the project (kept out of git). It writes plans and reports there and waits; I review each one and write the next instructions file. I still evaluate every milestone before the next starts, as you asked.
+- **Git tonight:** local commits only, made when I tell Claude Code to commit, after a scripted secret scan. No push. I run my full checks and you or I push in the morning.
+- **When Claude Code meets a decision outside the map:** it logs it, takes the safest reversible default, marks it PROVISIONAL, and continues with unaffected work.
+
+## What changed in version 10
+
+- **New working mode (D22):** while you sleep, I drive Claude Code in your VS Code (using computer use on your Mac), one milestone at a time, and we find out how many milestones can run without you.
+- **Your answers:** mocked tests only, no live Groq or Voyage calls unattended; I check the Milestone 3 summary against the facts and approve it for you; and git changes: commit and push after each finished milestone (this overrides the old rule that you run git, so it comes with guardrails).
+- **Input map:** each milestone listed with what needs you. Milestone 5's question set and live runs, and all of Milestone 7, need you. Milestones 4 and 6 and the Milestone 5 harness do not.
+- **Housekeeping:** the milestone list in D-1 was out of date and has been corrected.
 
 ## What changed in version 9
 
@@ -206,7 +238,15 @@ A **client** is anything that calls these: your Streamlit page, a website, a mob
 28. **Result** (D20): the path works and is fast, but the 120b answered two near-miss questions wrongly.
 29. **Prompt v2 written and compared** on all 28 questions in three combinations (D21).
 30. **Review:** v2 adopted; the 20b made the provisional default; I asked for a stability check, a look at over-citation, and a check of the fallback direction.
-31. **Next:** Claude Code's follow-up report, then you approve the Milestone 3 summary for `NOTES.md`.
+31. **Claude Code did part of the follow-up** (SPEC.md and WORKFLOW.md now mention D-036, and the Milestone 5 reminder is conditional). I have not yet seen its report.
+32. **You asked me to run the build overnight** (D22): mocked tests only, I approve the Milestone 3 summary, git commit and push after each milestone. I drafted an input map for you to confirm.
+33. **You confirmed the plan:** M3 wrap-up, M4, M5 (no-input parts), M6; local commits only; safe defaults when blocked.
+34. **VS Code turned out to be click-only** for me (no typing or pasting), so the plan to paste prompts failed at the access step.
+35. **New channel (D23):** a gitignored `handoff/` folder as a mailbox. You paste one master prompt; I send every later instruction as a numbered file.
+36. **You pasted the master prompt; the channel test passed.** Claude Code answered my first instruction within about 45 seconds.
+37. **Milestone 3 wrap-up and commit:** the secret scan stopped the commit twice on fake test keys; they were renamed (`fake-...`) and a stricter pattern adopted. M3 committed locally as 48002b2.
+38. **Milestone 4:** I approved its plan with additions; it built it (410 tests passing) and reported. I told it to commit and to write the M4 summary draft and the M5 plan.
+39. **02:25: the connection to your Mac dropped.** Work stopped being reviewable. What remains is in D24.
 
 ---
 
@@ -857,6 +897,103 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 
 **Revisit when.** The stability check shows flips on near-miss questions (then a second check on the answer becomes more attractive), or the Milestone 5 set shows the 20b is worse on harder answerable questions (then the 120b returns as the main model).
 
+## D22. The overnight run: how it works, and where you are needed
+
+**Situation.** You asked me to work while you sleep, instructing Claude Code in your VS Code the way I do now by pasting prompts, and to find out how many milestones can run without you. I checked the link first: your MacBook is connected to this session and both project folders are visible. Computer use (seeing and clicking your screen) is available but switched off, and I won't turn it on until you confirm.
+
+**Your answers.**
+
+| Question | Your answer | What it means |
+|---|---|---|
+| Scope | Review each milestone first and list where your input is needed; go one at a time and see how far it gets | The input map below |
+| Milestone 3 summary | I check it against the facts and approve | You read it in the morning and can change it |
+| Git | Commit and push after each finished milestone | Overrides "you run git" in WORKFLOW.md, so it needs guardrails (below) |
+| Live calls | Mocked tests only | No Groq or Voyage use while you sleep; anything needing a live check is queued for the morning |
+
+**How it works (superseded by D23: VS Code is click-only, so the channel became a file mailbox).** I take a screenshot of VS Code, paste the prompt into the Claude Code panel, read its report from the screen, review it against the spec and WORKFLOW.md exactly as I do now, and write the next prompt. I update `DECISIONS.md`-linked notes in this chat. In the morning you get one hand-off message with what was built, what I decided and why, and anything I held for you. It is slower than you pasting (each step is a screenshot and a read), and I stop if my turn ends, so I work in long stretches.
+
+**The input map.**
+
+| Milestone | What gets built | Where you are needed | Can it run without you? |
+|---|---|---|---|
+| 3 wrap-up | Prompt v2 and the 20b as defaults, configurable fallback, tests, summary draft | Nothing, you delegated the summary approval. The stability check (about 36 live Groq calls) moves to the morning list because of "mocked only", logged as deferred | Yes |
+| 4 Guardrails and memory | Clarify merged with the history rewrite (one 20b call), `clarify` status, session memory, logging with masking | Nothing hard. Defaults I'd choose: last 4 turns of memory, sessions expire after 24 hours, never ask two clarifying questions in a row, when in doubt answer, mask emails and phone numbers. The clarify prompt can only be tested with mocks, so its real quality is unknown until a morning live check (about 15 Groq calls) | Yes |
+| 5 Evaluation | `run_eval.py`, judge prompts and rubric, a DRAFT question set, tests with mocks | **You:** approve every question and expected answer; the live runs (about a day of 120b quota and one to two days of judge quota); hand-check about 10 judge verdicts; choose the final answer model; retune the threshold. The start reminder to run both models is still in force | The harness and draft only. It stops before any live run |
+| 6 UI and packaging | Streamlit UI (chat, status badge, sources list, document list), the full test suite, README skeleton, diagram check | Nothing hard. Layout is my call; screenshots are yours later. Out of order, since M5's live part is still open, so it needs your OK | Yes, if you allow the reorder |
+| 7 Showcase | Demo script, screenshots, case study, clean-clone test | **You:** the video and screenshots; the case study needs real Milestone 5 numbers; the clean-clone test uses live Voyage and Groq | No |
+
+**Rules I will follow.**
+- **Plans:** I approve a milestone plan only if it matches the map. A new package, a database choice the map doesn't cover, or a spec change means I stop and wait.
+- **Hard stops (I stop, write the hand-off, and do nothing else):** a request for a card or payment; any key or secret in a diff or output; failing tests I can't explain; anything surprising or irreversible; any 429 or fallback in a log.
+- **Never:** read `.env`, enable live calls, change SPEC.md, or write to NOTES.md without the approvals above.
+- **Skipping:** anything not done is logged as deferred, never as done.
+
+**Git guardrails (for each milestone).**
+1. When a milestone's tests and ruff are green and its summary is approved, I run read-only checks on the folder: `git status --short`, `git check-ignore -v .env data/seed`, a list of tracked files containing `.env` or `data/seed`, and a search of the changes for key patterns.
+2. Claude Code runs `git add` on the specific files from that list (not a blind `add -A`), commits with the message "Milestone N: name", and pushes to `main`.
+3. After the push, I search the full history for key patterns, as after every earlier push.
+4. Any finding, failed push or unexpected file means I stop. No retries, no force-push, no history changes.
+
+**Before you sleep.**
+- Plug the Mac in, keep the lid open, and turn off sleep and screen lock for the night. (An unlocked laptop overnight is the cost.)
+- Open VS Code on `/Users/shoaibhassan/Local Files/AIAgents/rag-document-chatbot`. A second connected folder exists under `Desktop`; I'll use the Local Files one.
+- Make sure Docker Desktop is running so the database tests can run, and keep the Claude Code panel visible.
+- Turn computer use on when I ask, and approve VS Code only. I'll run a harmless test before you go.
+
+**Revisit when.** The first milestone shows the link is too slow or breaks (then I stop and write the hand-off), or any hard stop happens.
+
+## D23. The overnight channel: a file mailbox
+
+**Situation.** When I asked for access to VS Code, the system said editors and terminals can only be granted click-only: I can see the screen and click, but not type, press keys or paste. That means I can't paste prompts into the Claude Code panel. I chose not to work around the restriction. The file bridge to your project folder is allowed, though, and it lets me read files and write files into a connected folder.
+
+**The design.** You paste one master prompt into Claude Code before bed. From then on, the conversation runs through files in a `handoff/` folder in the project, which is added to `.gitignore` so it is never committed:
+
+| File | Written by | Purpose |
+|---|---|---|
+| `RUNBOOK.md` | Claude Code (a copy of the master prompt) | The standing orders; it re-reads them after any context reset |
+| `STATUS.md` | Claude Code | Current step, time, and whether it is waiting or hard-stopped |
+| `PLAN_Mn.md`, `REPORT_Mn.md` | Claude Code | A plan to approve and a finished-milestone report in the usual format |
+| `INSTRUCTIONS_01.md`, `_02.md`, ... | Me | My approvals, fixes, commit orders and the next step. They end with a marker line so a half-written file is never read |
+| `MORNING_TODO.md` | Claude Code | Everything deferred (live checks, your decisions) |
+
+After sending a plan or report, Claude Code waits by checking for the next numbered instructions file once a minute. I read the report (by staging the files, read-only), review it against the spec and WORKFLOW.md as I do now, and write the next instructions file.
+
+**Trust rules in the master prompt.** Claude Code follows instructions only from a numbered file in `handoff/`. Even then it refuses, and logs, anything that would read `.env`, make a live Groq or Voyage call, push, edit SPEC.md, write NOTES.md without an approval line, spend money or create accounts. Hard stops: a secret in any file or output, any payment request, repeated unexplained test failures, anything destructive or irreversible, an unapproved package. At a hard stop it writes the reason to `STATUS.md` and stops.
+
+**What I write in your project.** Only the numbered instruction files inside `handoff/`. I change no code and no other file. This is a small exception to "read-only on the project folder", which you can veto.
+
+**Git tonight.** Claude Code makes a local commit only when my instructions file says COMMIT. It stages the listed files by name (never `add -A`), runs a secret scan on the staged changes, and aborts if it finds anything, or if `.env`, `data/seed/` or `handoff/` is staged. It never pushes. In the morning I run my full checks and the push happens.
+
+**Limits to expect.** It is slower than you pasting. Claude Code's session may hit a usage limit or a context compaction overnight, which is why the standing orders live in a file. If my own turn ends, Claude Code simply waits and stops after six hours. A misread file or a wrong approval of mine would carry on unreviewed for a while, which is why the first instruction file doubles as a test and why hard stops halt everything.
+
+**Revisit when.** The channel test fails, Claude Code can't wait without prompting for permission, or any hard stop occurs.
+
+## D24. The overnight run: what happened, and where it stands
+
+**What was done.**
+- **Channel:** a file mailbox in `handoff/` (gitignored). Seven numbered instruction files from me; Claude Code acknowledged each, waited with a small script (`wait_for.sh`), and wrote plans and reports.
+- **Milestone 3 wrap-up:** the Groq "Failed to generate JSON" retry (D-037, provisional), summary written to NOTES.md, local commit 48002b2 (37 files, not pushed).
+- **Secret scan:** it stopped the commit twice (made-up test keys like `gsk_test_secret_value` and `gsk-super-secret`), which is exactly what it is for. The fake values were renamed to `fake-...` and the scan was split into a strict check (real key shapes stop the commit) and a loose check (listed, not blocking).
+- **Milestone 4:** built per its plan (410 tests pass, 91 new, ruff clean): one small-model call that either turns a follow-up into a standalone search or asks one short clarifying question; code-side rules (clarify only if it is one short question, never twice in a row, any failure means just search); memory of the last 4 exchanges per session with a 24-hour expiry; logging with email and phone masking. The migration was not applied to the real database.
+- **Permissions:** you approved prompts by hand, then added an allow-list in `.claude/settings.local.json` (gitignored) with `git push` and `.env` reads denied.
+
+**What happened after the link came back.**
+- **Milestone 4:** committed locally as 860e03d (19 files), summary drafted in `SUMMARY_M4.md` (not in NOTES.md, waiting for you).
+- **Milestone 5, harness only:** committed locally as 45966b5 (23 files): the runner, the judge, scoring, pacing, resumable state, 40 DRAFT questions, three judge prompts and mocked tests. 516 tests pass, ruff clean. **No evaluation was run and no score exists.** A dry run labels its output "DRY RUN: FAKE DATA, NOT A RESULT".
+- **Milestone 6:** Claude Code wrote `PLAN_M6.md`; I approved it in instruction 10 as **option B** (Streamlit is not installed, because the stack has no `ui` dependency group and installing it needs your permission). It built the UI in three layers (a display layer with no Streamlit import, an HTTP client, and one thin Streamlit page), `Dockerfile.ui`, a compose `ui` service behind a profile, a README skeleton with every number marked TBD, and extra tests (client, view, chat contract, end-to-end API, readme, packaging).
+- **Rules I added for M6 (instruction 10):** no changes to `pyproject.toml` or `uv.lock`; `Dockerfile.ui` takes the Streamlit version as a required build argument with no default; model answers render as plain text, never as markdown or HTML, so a bad answer can't load an outside image or link; the UI never prints or stores the key.
+- **Limit:** at 2:55 AM Claude Code hit its 5-hour usage limit (resets 5:10 AM). It does not restart by itself, and I cannot type into VS Code (click-only), so it waited until you typed `continue` at 6:21 AM. It then wrote `REPORT_M6.md`.
+- **M6 result:** 631 tests passed, 1 skipped, ruff clean. The skipped one is `tests/test_ui.py` (16 page tests that need Streamlit). The page `ui/streamlit_app.py` has never been run. Committed locally as **15573f2** (18 files) after instruction 11 (tidy DECISIONS.md, explicit file list, scans). `handoff/FINAL.md` written; Claude Code stopped.
+- **My checks before any push (all four commits, 93232b8..HEAD):** path check clean; no `.env`, `data/seed/`, `handoff/`, `.claude/` or `Claude outputs/` tracked; strict key-pattern scan on every added line clean. I did not read `.env`, so a scan for your actual key values is not possible from here.
+
+**What is still unverified.** The Streamlit page and its 16 page tests, the Docker build of both images, the compose `ui` profile, migration 002 on the real database, and everything live (clarify behaviour, JSON-400 retry, stability, the evaluation).
+
+**Morning checklist (in order).**
+1. Open VS Code, and check `handoff/STATUS.md`, `git log --oneline -4` and `git status --short`. Expect commits 48002b2 (M3), 860e03d (M4), 45966b5 (M5 harness) and possibly an M6 commit, nothing pushed.
+2. Tell me when the Mac is awake and I'll re-read the handoff files and check the commits with my secret checks. Nothing should be pushed until I have.
+3. Review `MORNING_TODO.md`, `SUMMARY_M4.md`, and the NOTES.md entries (M3 is marked "approved by the reviewer, owner to confirm").
+4. Then we decide whether to continue M5's harness and M6 the same way, with the Mac set not to sleep.
+
 ---
 
 # PART C: Measuring success, risks and what's verified
@@ -967,10 +1104,10 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 
 1. **Setup** (done and reviewed): repo, uv project, Docker Compose, config, `.env.example`, key-check script.
 2. **Ingestion** (done and reviewed): load, chunk, embed (throttled, resumable), store, dedup, API, CLI, local-only seed tool.
-3. **Retrieval and answers** (built, 292 tests passing, live run pending your approval of the questions): top 5, threshold and both refusal paths, grounded answer, citations, `/chat`, the clarify hook.
-4. **Guardrails and memory:** clarify-before-retrieving, threshold, refusal, session memory, logging.
-5. **Evaluation:** test set, judge, report against targets, measure the clarify step.
-6. **UI and packaging:** Streamlit, README, diagram, seed file.
+3. **Retrieval and answers** (built and committed locally; prompt v2, fallback and JSON-400 retry done): top 5, threshold and both refusal paths, grounded answer, citations, `/chat`, the clarify hook.
+4. **Guardrails and memory** (built, committed locally; live checks and migration 002 pending): clarify-before-retrieving, threshold, refusal, session memory, logging.
+5. **Evaluation** (harness built and committed locally; live part waits for you): test set, judge, report against targets, measure the clarify step.
+6. **UI and packaging** (built and committed locally as option B; Streamlit not installed, page never run): Streamlit, README, diagram, seed file.
 7. **Showcase:** demo script, video and screenshots, case study, production notes.
 
 ## D-2. Status board
@@ -998,7 +1135,13 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 | Milestone 3 smoke run and reasoning experiment | Done: path works, about 1.8 s; reasoning-token result inconclusive |
 | Near-miss grounding on the 120b | Problem found (O09, O10 answered); prompt v2 fixed O10 but not O09 |
 | Prompt v2 comparison (28 questions, three combinations) | Done (D-035); v2 adopted, 20b provisional default |
-| Stability check, over-citation count, fallback direction | Requested from Claude Code |
+| Stability check, over-citation count, fallback direction | Requested; stability check deferred to the morning (live calls) |
+| Overnight run (D22 to D24) | M3 and M4 done locally; M5 harness plan was being written; link lost at 02:25 |
+| Milestone 3 | Built, committed locally (48002b2), not pushed; summary in NOTES.md (owner to confirm) |
+| Milestone 4 | Built, committed locally (860e03d), not pushed; summary draft in `SUMMARY_M4.md` |
+| Milestone 5 harness | Built, committed locally (45966b5); no evaluation run, no score |
+| Milestone 6 | Built without Streamlit (option B), committed locally (15573f2); page and its 16 tests never run |
+| Push | Not done. 4 local commits (48002b2, 860e03d, 45966b5, 15573f2); secret checks clean; waiting for your go |
 | Milestone 3 summary in `NOTES.md` | Waiting for your approval after the v2 comparison |
 
 ## D-3. Next steps
@@ -1011,7 +1154,9 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 6. ~~Review the smoke run.~~ Done (D20).
 7. ~~Send Claude Code the prompt v2 and comparison request.~~ Done (D21). Now: send the follow-up prompt (stability check, over-citation count, fallback, defaults, tests) and review its report.
 8. Approve the Milestone 3 summary for `NOTES.md`.
-9. Commit and push after the milestone is reviewed.
+9. ~~Commit and push after the milestone is reviewed.~~ Now automatic after each milestone, with guardrails (D22).
+10. ~~Confirm the input map.~~ Done. Paste the master prompt into Claude Code, set its permissions, keep the Mac awake and plugged in, and stay for the channel test.
+11. In the morning: read the hand-off, run the deferred live checks (stability, clarify prompt), and review Milestone 5's draft question set.
 
 ## D-4. Decision log (one line each)
 
@@ -1038,6 +1183,9 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 | D19 | Calibration: no threshold separates answerable from near-miss questions; use 0.40 as a provisional gate against unrelated questions and rely on the prompt for near-misses (confirmed, provisional) | Overlap between 0.44 and 0.58; raising the gate would refuse real patients |
 | D20 | First live run: the path works (about 1.8 s); the 120b answered two near-miss questions wrongly; try a generic prompt v2 and compare on all 28 questions before choosing the answer model (recommended) | The threshold can't catch near-misses; test on the model we will ship |
 | D21 | Prompt v2 compared on 28 questions; adopt v2; 20b as provisional default, 120b kept as candidate and fallback; stability, over-citation and fallback checks requested (recommended) | Only one question separates the combinations; wrong answers cost more than a slightly weaker model |
+| D22 | Overnight run through VS Code: mocked tests only, I approve the M3 summary, commit and push after each milestone with guardrails; input map per milestone (recommended, awaiting your confirmation) | You asked to see how far unsupervised work goes; the live runs and the question set stay yours |
+| D24 | Overnight result: M3 committed locally, M4 built (410 tests), link dropped at 02:25; push waits for my morning secret checks | Review stayed possible until the connection was lost |
+| D23 | VS Code is click-only for me, so overnight prompts go through a file mailbox in `handoff/`; local commits only, no push; safe defaults when blocked (recommended, you confirmed the plan) | I may not type into VS Code and won't work around that; files keep me reviewing every milestone |
 
 ## D-5. Glossary
 
@@ -1081,6 +1229,7 @@ Both are **grounding failures**: the answer is built from real text, cited to a 
 - **Grounding failure:** an answer built from real document text that still doesn't answer the question asked (it swaps in a related fact or drops a stated condition).
 - **Non-deterministic:** giving slightly different output on repeated runs of the same input, even with the temperature set to 0.
 - **Over-citation:** listing a source the answer didn't actually use, so a citation points at the wrong file.
+- **Mailbox:** a folder of files two programs use to pass messages when they can't talk directly (here `handoff/`).
 - **Gate:** the threshold check that refuses weak matches before any LLM is called.
 - **Calibration:** measuring real examples to choose a setting (here, the similarity threshold) instead of guessing it.
 - **Cosine similarity:** a score of how closely two vectors point in the same direction. Higher means more similar in meaning.

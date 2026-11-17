@@ -1,0 +1,6 @@
+# Streamlit settings for the demo UI (UNVERIFIED: Streamlit was not installed when this was written).
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

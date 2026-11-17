@@ -34,5 +34,26 @@ services:
       db:
         condition: service_healthy
 
+  # The demo chat UI. UNVERIFIED DRAFT (Milestone 6): behind a profile so that a plain
+  # `docker compose up` starts exactly what it started before. Start it with
+  #   STREAMLIT_VERSION=<pinned version> docker compose --profile ui up --build
+  # once Streamlit has been installed, locked and checked (see handoff/MORNING_TODO.md).
+  ui:
+    profiles: ["ui"]
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+      args:
+        STREAMLIT_VERSION: ${STREAMLIT_VERSION:-}  # required; Dockerfile.ui refuses to build without it
+    environment:
+      API_BASE_URL: http://api:8000
+      # Only the app key, passed explicitly. Never env_file or a .env mount: the UI must not receive
+      # the Groq or Voyage keys.
+      APP_API_KEY: ${APP_API_KEY:-}
+    ports:
+      - "127.0.0.1:${UI_HOST_PORT:-8510}:8501"
+    depends_on:
+      - api
+
 volumes:
   pgdata:

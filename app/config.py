@@ -112,8 +112,8 @@ class Settings(BaseSettings):
 
     # --- Evaluation runner (eval/run_eval.py) ---
     judge_correctness_prompt_version: str = "judge_correctness_v1"
-    judge_faithfulness_prompt_version: str = "judge_faithfulness_v1"
-    judge_combined_prompt_version: str = "judge_combined_v1"  # used with --judge-calls 1
+    judge_faithfulness_prompt_version: str = "judge_faithfulness_v2"
+    judge_combined_prompt_version: str = "judge_combined_v2"  # used with --judge-calls 1
     # Groq free-plan limits per model (owner's console); the runner paces itself under them.
     groq_tokens_per_minute: int = 8_000
     groq_requests_per_minute: int = 30

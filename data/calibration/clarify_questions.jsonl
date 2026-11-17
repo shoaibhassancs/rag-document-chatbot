@@ -1,0 +1,61 @@
+{"_header": "DRAFT: clarify-tuning set written by Claude on Nov 17, 2026. NOT approved by the owner. Used only by scripts/check_clarify.py to tune the clarify prompt; kept apart from eval/questions.jsonl so the approved 40 stay a clean test.", "note": "Each item has the expected action of the clarify step (search or clarify). No item repeats a question or setup turn of eval/questions.jsonl or data/calibration/questions.jsonl (a test checks that)."}
+{"id": "S01", "expected_action": "search", "kind": "clear: you/your/near", "question": "is there parking near your clinic?"}
+{"id": "S02", "expected_action": "search", "kind": "clear: you/where", "question": "where do i park when i come to see you"}
+{"id": "S03", "expected_action": "search", "kind": "clear: close/your", "question": "how close is the nearest train station to your office?"}
+{"id": "S04", "expected_action": "search", "kind": "clear: where/you", "question": "Where are you located?"}
+{"id": "S05", "expected_action": "search", "kind": "clear: terse", "question": "what's your street address"}
+{"id": "S06", "expected_action": "search", "kind": "clear: here", "question": "do you have wheelchair access here?"}
+{"id": "S07", "expected_action": "search", "kind": "clear: close/your", "question": "is your clinic close to the highway"}
+{"id": "S08", "expected_action": "search", "kind": "clear: where/your", "question": "where is the entrance to your building"}
+{"id": "S09", "expected_action": "search", "kind": "clear: typo/you", "question": "how do i get to u by bus"}
+{"id": "S10", "expected_action": "search", "kind": "clear: terse/your", "question": "your phone number?"}
+{"id": "S11", "expected_action": "search", "kind": "clear: hours", "question": "what time do you open on weekdays"}
+{"id": "S12", "expected_action": "search", "kind": "clear: typo/hours", "question": "are yuo open on sundays"}
+{"id": "S13", "expected_action": "search", "kind": "clear: prices/your", "question": "How much is a regular checkup and cleaning at your practice?"}
+{"id": "S14", "expected_action": "search", "kind": "clear: terse/prices", "question": "price of a porcelain crown"}
+{"id": "S15", "expected_action": "search", "kind": "clear: insurance", "question": "do you accept Aetna?"}
+{"id": "S16", "expected_action": "search", "kind": "clear: insurance/you", "question": "what insurance plans do you work with"}
+{"id": "S17", "expected_action": "search", "kind": "clear: payments", "question": "can I use my FSA card to pay"}
+{"id": "S18", "expected_action": "search", "kind": "clear: sedation", "question": "Do you offer sedation for nervous patients?"}
+{"id": "S19", "expected_action": "search", "kind": "clear: kids/your", "question": "Do you see children at your clinic?"}
+{"id": "S20", "expected_action": "search", "kind": "clear: aftercare", "question": "what should i avoid eating after a filling"}
+{"id": "S21", "expected_action": "search", "kind": "clear: aftercare", "question": "how long do i need to wait before eating after whitening"}
+{"id": "S22", "expected_action": "search", "kind": "clear: policy", "question": "what happens if i need to cancel my appointment tomorrow"}
+{"id": "S23", "expected_action": "search", "kind": "clear: policy", "question": "do you charge for missed appointments?"}
+{"id": "S24", "expected_action": "search", "kind": "clear: payments", "question": "can i pay in installments"}
+{"id": "S25", "expected_action": "search", "kind": "clear: payments", "question": "Do you have a payment plan for big treatments?"}
+{"id": "S26", "expected_action": "search", "kind": "clear: policy", "question": "how do I make a complaint about my visit"}
+{"id": "S27", "expected_action": "search", "kind": "clear: team/your", "question": "who are the dentists on your team?"}
+{"id": "S28", "expected_action": "search", "kind": "clear: team/your", "question": "do your dentists speak spanish"}
+{"id": "S29", "expected_action": "search", "kind": "clear: kids/here", "question": "do you have a play area for kids in the waiting room"}
+{"id": "S30", "expected_action": "search", "kind": "clear: new patient", "question": "what do i need to bring to my first appointment"}
+{"id": "S31", "expected_action": "search", "kind": "clear: emergency/you", "question": "how soon can I get an emergency appointment with you"}
+{"id": "S32", "expected_action": "search", "kind": "clear: policy", "question": "Do you remind patients before their appointments?"}
+{"id": "S33", "expected_action": "search", "kind": "clear: prices", "question": "do you have a membership plan for people without insurance"}
+{"id": "S34", "expected_action": "search", "kind": "clear: polite long/hours", "question": "Hi there, could you please tell me whether you are open late on thursday evenings? Thank you!"}
+{"id": "S35", "expected_action": "search", "kind": "clear: infection control/you", "question": "how do you clean and sterilise your instruments"}
+{"id": "S36", "expected_action": "search", "kind": "clear: referral/you", "question": "can you refer me to a specialist if i need one"}
+{"id": "V01", "expected_action": "clarify", "kind": "vague", "question": "how much does it cost"}
+{"id": "V02", "expected_action": "clarify", "kind": "vague", "question": "is it covered?"}
+{"id": "V03", "expected_action": "clarify", "kind": "vague", "question": "how long until it is finished"}
+{"id": "V04", "expected_action": "clarify", "kind": "vague", "question": "can I book with him?"}
+{"id": "V05", "expected_action": "clarify", "kind": "vague", "question": "does she work on fridays?"}
+{"id": "V06", "expected_action": "clarify", "kind": "vague", "question": "is the price the same as before?"}
+{"id": "V07", "expected_action": "clarify", "kind": "vague", "question": "is that included in my plan?"}
+{"id": "V08", "expected_action": "clarify", "kind": "vague", "question": "what should i do about it"}
+{"id": "V09", "expected_action": "clarify", "kind": "vague", "question": "how long does it take?"}
+{"id": "V10", "expected_action": "clarify", "kind": "vague", "question": "do you do that here?"}
+{"id": "V11", "expected_action": "clarify", "kind": "vague", "question": "is he available tomorrow morning?"}
+{"id": "V12", "expected_action": "clarify", "kind": "vague", "question": "does it hurt?"}
+{"id": "V13", "expected_action": "clarify", "kind": "vague", "question": "how many visits will I need?"}
+{"id": "V14", "expected_action": "clarify", "kind": "vague", "question": "which dentist should I see for this?"}
+{"id": "V15", "expected_action": "clarify", "kind": "vague", "question": "can I get it cheaper?"}
+{"id": "V16", "expected_action": "clarify", "kind": "vague", "question": "can I book it for next week?"}
+{"id": "F01", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "what time do you close on fridays", "assistant": "We close at 5 pm on Fridays."}], "question": "and on thursdays?"}
+{"id": "F02", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "do you take delta dental", "assistant": "Yes, Delta Dental is accepted."}], "question": "what about metlife"}
+{"id": "F03", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "how much is a deep cleaning", "assistant": "A deep cleaning is priced per quadrant."}], "question": "and does insurance cover it?"}
+{"id": "F04", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "is there parking at your clinic", "assistant": "Yes, there is a lot behind the building."}], "question": "is it free?"}
+{"id": "F05", "expected_action": "search", "kind": "follow-up, clear in context", "history": [{"user": "do you offer sedation", "assistant": "Yes, nitrous oxide and oral sedation are offered."}], "question": "which one is better for a child"}
+{"id": "F06", "expected_action": "clarify", "kind": "follow-up, still vague", "history": [{"user": "what are your opening hours", "assistant": "We are open Monday to Saturday."}], "question": "and how much will that be"}
+{"id": "F07", "expected_action": "clarify", "kind": "follow-up, still vague", "history": [{"user": "do you do whitening", "assistant": "Yes, we offer whitening."}], "question": "can i book him"}
+{"id": "F08", "expected_action": "clarify", "kind": "follow-up, still vague", "history": [{"user": "what insurance do you take", "assistant": "We accept several major plans."}], "question": "is that one covered?"}

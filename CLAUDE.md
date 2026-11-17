@@ -23,7 +23,7 @@ At the start of every session, read @SPEC.md and @WORKFLOW.md and follow them. L
 - Regenerate sample PDFs (dev only): `uv run python -m scripts.make_sample_pdfs`
 - Database tests use a throwaway `ragdb_test` database on the Compose Postgres (skipped if it is down)
 - Demo UI (Streamlit 1.66.0 in the `ui` dependency group; run by hand once by the owner): `uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510` from the project root, no PYTHONPATH needed (port 8510 avoids the ports other containers use); compose service `ui` is behind the profile `ui` and needs `STREAMLIT_VERSION` (never built). Page tests: `uv run --group ui pytest tests/test_ui.py tests/test_ui_import_path.py`.
-- Evaluation harness (40 questions approved by the owner Nov 17, 2026; no scores yet): `uv run python -m eval.run_eval --dry-run` (fakes, output is not a result); a live run needs `--confirm-live` (and `--allow-draft` only if any question is DRAFT) and spends Groq/Voyage quota. See eval/README.md.
+- Evaluation harness (40 questions approved by the owner Nov 17, 2026; no scores yet): `uv run python -m eval.run_eval --dry-run` (fakes, output is not a result); a live run needs `--confirm-live` (and `--allow-draft` only if any question is DRAFT) and spends Groq/Voyage quota. See eval/README.md. Before a full run, check the clarify step with `uv run python -m scripts.check_clarify --dry-run` (live: `--confirm-live --prompt-version clarify_v2`; not yet run live).
 
 ## Rules of thumb
 

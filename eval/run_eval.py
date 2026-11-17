@@ -475,12 +475,18 @@ def summary_markdown(
     return "\n".join(lines)
 
 
-def handcheck_markdown(rows: list[dict], dry_run: bool) -> str:
+def handcheck_markdown(rows: list[dict], dry_run: bool, cfg: dict | None = None) -> str:
     judged = [r for r in rows if scoring._score(r.get("correctness")) is not None]
     rng = random.Random(HANDCHECK_SEED)
     chosen = rng.sample(judged, min(HANDCHECK_SAMPLE, len(judged)))
     lines = [DRY_RUN_LINE, ""] if dry_run else []
     lines += ["# Judge verdicts to check by hand", ""]
+    if cfg:
+        lines += [
+            f"Judge model: {cfg['judge_model']}; judge prompt versions: "
+            f"{cfg['judge_prompt_versions']}; clarify prompt: {cfg['clarify_prompt_version']}.",
+            "",
+        ]
     for r in sorted(chosen, key=lambda x: x["qid"]):
         c, f = r["correctness"], r.get("faithfulness") or {}
         lines += [
@@ -515,7 +521,8 @@ def write_results(
         encoding="utf-8",
     )
     handcheck.write_text(
-        handcheck_markdown([r for rows in all_rows for r in rows], runner.dry_run) + "\n",
+        handcheck_markdown([r for rows in all_rows for r in rows], runner.dry_run, runner.cfg)
+        + "\n",
         encoding="utf-8",
     )
     return [raw, summary, handcheck]

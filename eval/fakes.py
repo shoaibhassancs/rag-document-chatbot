@@ -118,3 +118,36 @@ class FakeJudge:
 
         self.calls.append("both")
         return Verdict(1, "fake: correct", 1), Verdict(1, "fake: faithful", 1)
+
+
+class FakeClarifyClient:
+    """Stands in for the rewrite-role LLMClient in scripts.check_clarify --dry-run and tests.
+    Replies with the expected action of the item whose question is in the <message> tag, unless
+    `wrong` names item ids that should get the opposite action."""
+
+    def __init__(self, items: list[dict], wrong: set[str] | None = None):
+        self._by_question = {i["question"]: i for i in items}
+        self._wrong = wrong or set()
+        self.calls: list[str] = []
+
+    def complete(self, system: str, user: str, *, json_mode: bool = True):
+        import json
+        import re
+
+        from app.generation.llm import LLMResult
+
+        match = re.search(r"<message>\n(.*?)\n</message>", user, re.DOTALL)
+        question = match.group(1) if match else ""
+        self.calls.append(question)
+        item = self._by_question.get(question)
+        action = item["expected_action"] if item else "search"
+        if item and item["id"] in self._wrong:
+            action = "clarify" if action == "search" else "search"
+        reply = {
+            "action": action,
+            "query": question,
+            "clarifying_question": "Which one do you mean?" if action == "clarify" else "",
+        }
+        return LLMResult(
+            json.dumps(reply), "fake-rewrite-model", "stop", 300, 20, 320, 0, None, 5, 1, False
+        )

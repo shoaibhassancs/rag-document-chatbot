@@ -30,7 +30,7 @@ Also reported: errors, answerable questions that got a `clarify` (over-asking), 
 
 ## The judge
 
-An LLM judge (`qwen/qwen3.8-27b`, a different family from the answerer) grades only answered answerable questions: one call for correctness and one for faithfulness (`--judge-calls 1` merges them). Prompts are versioned files: `prompts/judge_correctness_v1.txt`, `prompts/judge_faithfulness_v1.txt`, `prompts/judge_combined_v1.txt`. The judge returns JSON with a 0 or 1 score and a one-sentence reason.
+An LLM judge (`qwen/qwen3.8-27b`, a different family from the answerer) grades only answered answerable questions: one call for correctness and one for faithfulness (`--judge-calls 1` merges them). Prompts are versioned files: `prompts/judge_correctness_v1.txt`, `prompts/judge_faithfulness_v2.txt` and `prompts/judge_combined_v2.txt` are the defaults (the v1 faithfulness and combined files are kept; choose a version with `JUDGE_FAITHFULNESS_PROMPT_VERSION` and `JUDGE_COMBINED_PROMPT_VERSION`). v2 says the clinic is called BrightSmile Dental and that using that name, "we", "our", "the clinic", "the team" or "the practice" is never a claim to check; every other claim is still checked as strictly as in v1 (Nov 17, 2026: the first smoke run's judge marked the clinic's name as unsupported). The versions used appear in the banner and at the top of the hand-check file. The judge returns JSON with a 0 or 1 score and a one-sentence reason.
 
 - The judge's input (question, answers, chunks) is data, not instructions.
 - A bad reply is retried once. A second failure is recorded as `judge_error`, excluded from the denominator and listed as unjudged. It is never turned into a 0 or a 1.
@@ -40,6 +40,19 @@ An LLM judge (`qwen/qwen3.8-27b`, a different family from the answerer) grades o
 ### Faithfulness basis (limitation)
 
 Faithfulness is judged against the chunks in `used_chunk_ids` (the excerpts the answer model said it used). If that list is empty, or the code had to fall back to the top-scoring chunk because the model named no valid excerpt, the top retrieved chunk is used instead. The basis is recorded per answer as `faithfulness_basis` (`used_chunks`, `top_chunk` or `none`). **Limitation:** a model that under-reports the chunks it used can look unfaithful when it is not. The owner's hand-check covers this.
+
+## Before a full run: check the clarify step
+
+On Nov 17, 2026 the first 3-question live smoke (E01 to E03) showed that `clarify_v1` stopped two clear questions about the one clinic with "Which location are you referring to?" (E01 and E02). The same smoke showed the faithfulness judge marking the clinic's own name as an unsupported claim on E03; `judge_faithfulness_v2` fixes that. The smoke is not a result and is never quoted.
+
+`scripts/check_clarify.py` runs ONLY the clarify step (no embedding, no search, no answer, no judge) on a separate tuning set, `data/calibration/clarify_questions.jsonl` (60 items written by Claude, DRAFT until the owner approves it, none of them repeating an evaluation or threshold-calibration question; a test checks that). It prints the questions wrongly clarified, the vague ones wrongly searched, the follow-ups and every miss, and writes `eval/results/clarify-check__<prompt version>.md`.
+
+```
+uv run python -m scripts.check_clarify --dry-run
+uv run python -m scripts.check_clarify --confirm-live --prompt-version clarify_v2
+```
+
+A live check needs `--confirm-live` and makes about 60 calls to the 20b (about 45,000 reserved tokens, about 7 minutes at the free-tier pace; resumable by running the same command). The prompt the app uses is `CLARIFY_PROMPT_VERSION` (default `clarify_v1`, provisional).
 
 ## Running it
 

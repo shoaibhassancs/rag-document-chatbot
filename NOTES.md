@@ -101,7 +101,7 @@ Milestone 2 turns documents into searchable knowledge. It reads PDF, Markdown, t
 
 ## Milestone 3: Retrieval and answers
 
-Approved by the reviewer on the owner's behalf, Nov 17, 2026 (overnight run); owner to confirm.
+Approved by the owner, Nov 17, 2026.
 
 ### What this milestone does
 Milestone 3 makes the chatbot answer. A question goes to `POST /chat`. The system turns the question into an embedding, finds the five most similar chunks in the database, drops weak matches, and asks a language model to answer using only those chunks. The reply has a status (`answered`, `refused` or `error`) and a list of sources. If nothing in the documents is close enough, it refuses without calling the model. Clarifying questions and conversation memory arrive in Milestone 4.
@@ -153,6 +153,57 @@ Milestone 3 makes the chatbot answer. A question goes to `POST /chat`. The syste
 - Whether Groq counts reasoning tokens against the per-minute limit is still inconclusive (about 300 tokens of uncertainty). The plan is to budget prompt plus the 600-token cap per call.
 
 ## Milestone 4: Guardrails and memory
+
+Approved by the owner, Nov 17, 2026.
+
+### What this milestone does
+Milestone 4 makes the chatbot behave in conversation. It remembers the last few exchanges of each session, so a follow-up like "and on Saturdays?" is understood. Before searching, one small model call decides whether the question is clear enough to search or needs one short clarifying question ("How much is it?" gets "Which treatment do you mean?"). Every exchange is logged to the database for later evaluation, with emails and phone numbers masked. The `/chat` reply gains a working `clarify` status; its shape did not change.
+
+### How it works
+- **Memory.** Postgres keeps the last 4 exchanges per session id. A session idle for more than 24 hours is treated as new straight away, and expired sessions are deleted lazily (on the first chat, then at most every 10 minutes). There is no background job.
+- **One call decides: search or clarify.** `gpt-oss-20b` (the rewrite role) sees the recent history and the new message and returns JSON: an action (`search` or `clarify`), a standalone search query, and a clarifying question if needed. The prompt is a versioned file, `prompts/clarify_v1.txt`.
+- **The model proposes, the code decides.** A clarifying question is accepted only if it is one short question. The system never asks two clarifying questions in a row (it remembers the status of the previous reply). If the call fails or returns something unusable, the system searches with the message as written, so the clarify step can never block an answer. When in doubt, it answers.
+- **The standalone query is what gets searched and answered.** The user's own words are what is stored in memory and in the log.
+- **A `clarify` reply does nothing else.** No embedding, no search, no answer call, no sources.
+- **Masking.** Emails become `[EMAIL]` and phone numbers `[PHONE]` in the stored memory, in the log table and in application log output. Prices, dates, years, page numbers and ZIP codes are left alone (tested). The reply to the user is never masked.
+- **Logging.** One row per exchange in `chat_logs`: question, standalone query, retrieved and used chunk ids, similarity scores, status, answer, timings, token use, and the prompt versions. No keys, no prompt text. A logging failure never changes the reply.
+- **Text is data, again.** The user's message and the history are wrapped in tags and tag-like text is escaped, so they cannot break out of the data section. Whatever the model returns as a query is only ever a search string.
+- **Switches.** `CLARIFY_ENABLED=false` skips the extra call. History length, session lifetime and prompt version are settings.
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| One merged clarify-and-rewrite call | The spec's design: one small call before retrieval, so follow-ups and vague questions are handled together |
+| Code enforces the clarify rules, not only the prompt | A model can ignore a prompt; "never two in a row" and "when in doubt, answer" must hold every time |
+| Fail open | A broken clarify step should degrade to plain search, not to errors |
+| Stored memory is masked (provisional) | Personal data is not kept at rest. Cost: a follow-up cannot refer back to an exact email or phone number |
+| The answer step gets the standalone query (provisional) | So a follow-up is answered as a full question |
+| No shortcut that skips the call for clear questions (provisional) | The spec measures the call's cost and accuracy in Milestone 5 |
+| No fallback model for the rewrite role (provisional) | A failure there falls back to plain search instead |
+| Lazy expiry of sessions (provisional) | No background thread or new package needed |
+| Rewrite output cap raised from 150 to 250 tokens | Room for a query plus a question plus short reasoning |
+
+### AI and engineering concepts involved
+- **Query rewriting.** A follow-up has no meaning alone; the model turns it into a standalone question using the history.
+- **Clarify before retrieving.** Asking costs one reply from the user, searching on a vague question wastes an answer; the system asks only when it must.
+- **Guardrails in code versus in the prompt.** The prompt asks the model to behave; the code verifies and overrides.
+- **Fail-open design.** If a helper step breaks, the main path still works.
+- **Short-term memory and expiry.** A small window of recent turns, forgotten after a day.
+- **PII masking.** Removing emails and phone numbers before they are stored, with tests for what must not be masked.
+- **Prompt injection through the user and the history.** Treated as data and validated by code.
+
+### What was verified
+- `ruff` clean and 410 tests pass (319 before). Groq and Voyage are mocked; the database tests use a throwaway Postgres database, never the real one.
+- Tests cover: masking formats and false positives; memory order, window, isolation, expiry and purge; every malformed clarify reply becoming a search; never two clarifies in a row; fail-open on bad JSON, cut-off replies, 503 and 401; a `clarify` reply making no embedding, search or answer call and having no sources, also over HTTP; one log row per exchange; memory and log failures not changing the reply; a missing session id (no memory, still logged); a document and a user message that give orders staying inside the data tags, with a simulated obedient model still getting citations only from chunk metadata.
+- Not applied to the real database: the migration `002_memory_and_logs.sql` is applied automatically at the next API restart.
+
+### What to watch out for
+- Nothing ran against the real Groq. How the real 20b behaves with the clarify prompt (asking too often, writing poor queries, the Groq "Failed to generate JSON" error on this call) is unknown until a live check.
+- Every question now costs two Groq calls on the same 20b model, which shares one 8K tokens per minute quota. Estimated throughput is about 2 questions a minute at best (about 1.8 in the worst case). Whether the rewrite role should use a different model with its own quota is an open decision for Milestone 5.
+- The extra call adds latency before retrieval (estimated 0.6 to 1 s). The spec's p50 target of 3 seconds must be re-measured live.
+- If the clarify step fails, the system quietly searches without it; `/health` does not report that.
+- A bare range like "450-1290" without a dollar sign can be masked as a phone number. The clinic's own phone number in an answer is masked in the logs, never in the reply.
+- The answer step now sees the rewritten query. If the rewrite is poor, retrieval could do worse than on the raw message; Milestone 5 can compare.
 
 ## Milestone 5: Evaluation
 

@@ -551,13 +551,25 @@ def estimate_plan(cfg: dict, questions: list[dict], repeat: int, judge_calls: in
     clarify_tokens = asks * EST_CLARIFY_TOKENS if cfg["clarify_enabled"] else 0
     answer_tokens = asks * EST_ANSWER_TOKENS
     judge_calls_total = answered * (1 if judge_calls == 1 else 2)
+    rewrite, answer = cfg["rewrite_model"], cfg["answer_model"]
+    if rewrite == answer:
+        shared = (
+            f"The clarify call and the answers both run on {answer}, so they share that model's "
+            f"daily quota ({clarify_tokens + answer_tokens:,} reserved tokens together)."
+        )
+    else:
+        shared = (
+            f"The clarify call runs on {rewrite} and shares that model's daily quota with any "
+            f"answers on {rewrite}; the answers run on {answer}."
+        )
     return (
         f"Would make about {asks} chat calls ({n} questions + {setups} setup turns) and up to "
         f"{judge_calls_total} judge calls.\n"
         f"Reserved tokens (estimate): answer model {answer_tokens:,}, rewrite model "
         f"{clarify_tokens:,}, judge about {judge_calls_total * 2000:,}.\n"
+        f"{shared}\n"
         f"Groq allows 200,000 tokens per model per day: one full pass of a model is about one "
-        f"day of its budget; the 20b and 120b have separate quotas."
+        f"day of its budget; different models have separate quotas."
     )
 
 

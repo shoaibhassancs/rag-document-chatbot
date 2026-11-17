@@ -604,6 +604,18 @@ def test_daily_usage_is_restored_from_the_state_for_today_only(tmp_path):
 # ----------------------------------------------------------------------------- misc
 
 
+def test_the_plan_says_the_clarify_call_runs_on_the_120b_and_shares_its_quota():
+    cfg = run_eval.config_snapshot(make_settings(), run_eval.DEFAULT_QUESTIONS, 2)
+    text = run_eval.estimate_plan(cfg, ALL, 1, 2)
+    assert "clarify call runs on openai/gpt-oss-120b" in text
+    assert "shares that model's daily quota" in text and "answers run on openai/gpt-oss-20b" in text
+    # when the 120b is also the answer model, both draw on the same quota
+    both = make_settings(answer_llm_model="openai/gpt-oss-120b")
+    cfg = run_eval.config_snapshot(both, run_eval.DEFAULT_QUESTIONS, 2)
+    text = run_eval.estimate_plan(cfg, ALL, 1, 2)
+    assert "both run on openai/gpt-oss-120b, so they share that model's daily quota" in text
+
+
 def test_the_plan_estimate_and_helpers():
     cfg = run_eval.config_snapshot(make_settings(), run_eval.DEFAULT_QUESTIONS, 2)
     text = run_eval.estimate_plan(cfg, ALL, 1, 2)

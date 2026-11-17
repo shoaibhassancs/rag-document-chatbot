@@ -45,13 +45,16 @@ flowchart LR
 
 ## Quick start
 
-TBD: verified by the clean-clone test in Milestone 7. The commands below are the ones the project documents:
+TBD: the final clean-clone test is done in Milestone 7. What you need first: Docker with Compose, a free Groq API key and a free Voyage AI API key (both free tiers, no payment method), and [uv](https://docs.astral.sh/uv/) with Python 3.12 if you want to run the tests, the evaluation or the UI outside Docker. The commands below are the ones the project documents:
 
 ```bash
-cp .env.example .env            # then add your own keys; never commit .env
+cp .env.example .env            # then put your two keys and a secret APP_API_KEY of your choice in .env; never commit .env
 docker compose up -d --build    # API on http://127.0.0.1:8010, database on 5440
+curl -s http://127.0.0.1:8010/health   # status ok once the database and both keys are set
 docker compose run --rm api python -m scripts.ingest_folder /app/data/sample_docs
 ```
+
+Ingesting the 30 sample documents takes a few minutes because Voyage's free plan allows only 3 requests a minute; the command prints progress, can be stopped and re-run, and skips what is already stored. Then chat with the `curl` example below, or start the UI (see "The UI").
 
 ## API
 
@@ -86,15 +89,15 @@ curl -s http://127.0.0.1:8010/health
 
 ## The UI
 
-Start it from the project root with the API running: `uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510`. TBD: screenshots and the Docker image, after the image is built and the page is checked again. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+Start it from the project root with the API running: `uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510`. The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run and checked by the owner in a browser on Nov 17, 2026. TBD: screenshots. The Docker images are not verified: the UI image (`docker compose --profile ui up --build`) has never been built or started, and the API image has not been rebuilt and re-checked since the latest changes (TBD in Milestone 7). The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
 
 ## Configuration
 
-All settings live in `.env` (git-ignored); `.env.example` lists every name with no values. Models, prompt versions, the similarity threshold, history length and session lifetime are settings, not code.
+All settings live in `.env` (git-ignored); `.env.example` lists every name with no values. Models, prompt versions, the similarity threshold, history length and session lifetime are settings, not code. Current models (all Groq free plan, one OpenAI-compatible client): the small step before retrieval (clarify or rewrite) runs on `openai/gpt-oss-120b` with prompt `clarify_v2`; the answer model is `openai/gpt-oss-20b` (provisional, the final choice is made from the evaluation); the judge is `qwen/qwen3.8-27b`. Embeddings are Voyage `voyage-4` (1024 dimensions).
 
 ## How it answers
 
-1. One small-model call turns a follow-up into a standalone query or asks one short clarifying question.
+1. One model call (`gpt-oss-120b`, prompt `clarify_v2`) turns a follow-up into a standalone query or asks one short clarifying question.
 2. The query is embedded and the top 5 chunks are retrieved by cosine similarity.
 3. Weak matches are dropped; if none are left the reply is a refusal and no answer model is called.
 4. A grounded prompt asks the answer model to use only those excerpts and to say when they do not cover the question.
@@ -116,9 +119,10 @@ Tests mock Groq and Voyage and never call them. Database tests use a throwaway `
 
 ## Known limitations
 
-- Free-tier limits (Groq and Voyage) make throughput low; the limits are listed in `SPEC.md`.
+- Free-tier limits (Groq and Voyage) make throughput low: about two questions a minute, because Voyage's free plan allows 3 requests a minute and each Groq model has its own per-minute and per-day token limits (listed in `SPEC.md`). A busy period gives a friendly "try again" reply, not an answer.
+- The clarify step sometimes asks a narrower question when a follow-up was already clear from the conversation (7 of 12 follow-ups handled as expected in the practice checks; those checks are not the evaluation). Clear questions and vague questions were handled correctly in those checks.
+- Answers can vary between runs: model outputs are not exactly repeatable even at temperature 0, and a similar question can be answered once and refused another time when the search query wording changes.
 - The similarity threshold and the answer prompt were tuned on a small calibration set; the real test is the evaluation set (TBD: from the real evaluation).
-- Model outputs are not exactly repeatable at temperature 0.
 - The answer model choice between `gpt-oss-20b` and `gpt-oss-120b` is provisional until the evaluation is run on both.
 - Chunks are smaller than the original target size (a decision recorded in `DECISIONS.md`).
 - Scanned PDFs, images and tables inside PDFs are not supported.

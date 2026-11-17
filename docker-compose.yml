@@ -44,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile.ui
       args:
-        STREAMLIT_VERSION: ${STREAMLIT_VERSION:-}  # required; Dockerfile.ui refuses to build without it
+        STREAMLIT_VERSION: ${STREAMLIT_VERSION:-1.66.0}  # the version in uv.lock; .env can override
     environment:
       API_BASE_URL: http://api:8000
       # Only the app key, passed explicitly. Never env_file or a .env mount: the UI must not receive

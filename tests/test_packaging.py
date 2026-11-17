@@ -70,7 +70,9 @@ def test_the_ui_port_avoids_the_ports_already_in_use():
 
 def test_compose_interpolation_cannot_break_a_plain_compose_up():
     code = compose_code()
-    assert "${STREAMLIT_VERSION:-}" in code and ":?" not in code  # no required variable
+    # Changed deliberately (INSTRUCTIONS_23): the default is the version locked in uv.lock.
+    assert "${STREAMLIT_VERSION:-1.66.0}" in code and ":?" not in code  # no required variable
+    assert 'name = "streamlit"\nversion = "1.66.0"' in (ROOT / "uv.lock").read_text()
 
 
 def test_the_ui_dockerfile_is_a_marked_draft_with_a_required_version_argument():

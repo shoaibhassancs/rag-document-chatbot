@@ -54,7 +54,7 @@ uv run python -m scripts.check_clarify --confirm-live --prompt-version clarify_v
 
 `--set tuning|heldout` chooses the item set (default tuning). The held-out set, `data/calibration/clarify_heldout.jsonl` (30 new DRAFT items, never used to edit a prompt), is run once at the end for the final decision; its banner and results say so, and its files end in `__heldout`. On Nov 17, 2026 the tuning check gave `clarify_v1` 4 of 36 clear questions wrongly clarified and `clarify_v2` 6 of 36 (a new family: questions that name an insurer, card or payment arrangement), so `clarify_v3` was written.
 
-A live check needs `--confirm-live` and makes about 60 calls to the 20b (about 45,000 reserved tokens, about 7 minutes at the free-tier pace; resumable by running the same command). The prompt the app uses is `CLARIFY_PROMPT_VERSION` (default `clarify_v1`, provisional).
+A live check needs `--confirm-live` and makes about 60 calls (about 45,000 reserved tokens, about 7 minutes at the free-tier pace; resumable by running the same command). **The app's clarify call runs on `openai/gpt-oss-120b` with prompt `clarify_v2`** (owner decision D-078, Nov 17, 2026; set by `REWRITE_LLM_MODEL` and `CLARIFY_PROMPT_VERSION`). Known limitation: it over-asks on some follow-up questions (7 of 12 follow-ups right in the practice checks, which are not the evaluation).
 
 ## Running it
 
@@ -75,7 +75,7 @@ uv run python -m eval.run_eval --confirm-live [--phase answer|judge|all] [--repe
 
 Groq's free plan allows 30 requests per minute, 8,000 tokens per minute, 1,000 requests per day and 200,000 tokens per day, per model. The runner paces itself at 90% of each limit and reserves each call's prompt estimate plus its output cap, the same way Groq does at admission.
 
-- On the 20b, one question reserves about 2,900 tokens across the clarify call and the answer call, because both use the same quota (about 800 and 2,100). That is about two questions a minute, and a full pass of 44 chat calls (40 questions and 4 setup turns) is about 130,000 tokens: **about one day of that model's token budget**. The 120b and 20b answer passes have separate quotas and can share a day.
+- The clarify call runs on the 120b (about 800 reserved tokens, about 950 used) and **shares the 120b's 200,000 daily tokens with the 120b answers**. With the 20b as answer model, the 20b serves only the answers (about 70,000 to 85,000 tokens for 44 chat calls) and the 120b only the clarify calls (about 42,000). With the 120b as answer model, the 120b serves both (about 120,000 to 130,000). A full pass of one model is about one day of that model's token budget. About two questions a minute (Voyage's 3 requests a minute is the limit). Run A (20b answers) and Run B (120b answers) should be on separate days unless the Groq console shows enough room.
 - The judge is on its own model (`qwen/qwen3.8-27b`) with its own quota: about 58 calls for 29 answers, roughly half of its daily budget.
 - Voyage (3 requests and 10,000 tokens per minute) is used for one tiny query embedding per question; the existing limiter and query cache apply, and the pace keeps it under 3 requests a minute.
 - These are estimates, not measurements.

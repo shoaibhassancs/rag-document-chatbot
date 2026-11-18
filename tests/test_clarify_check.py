@@ -422,3 +422,77 @@ def test_the_run_id_and_state_differ_by_set_so_they_never_mix(dirs):
     assert cc.HELDOUT_WARNING in summary
     assert cc.HELDOUT_WARNING not in (dirs[1] / "clarify-check__clarify_v2.md").read_text()
     assert len(held.client.calls) == 3
+
+
+# ----------------------------------------------------------------------------- the extra set (V2)
+
+EXTRA_HEADER, EXTRA = cc.load_items(cc.EXTRA_SET)
+
+
+def _tokens(text):
+    return set(cc.normalize(text).split())
+
+
+def test_the_extra_set_is_well_formed_draft_and_marked_as_informed_by_run_a():
+    head = EXTRA_HEADER["_header"]
+    assert (
+        head.startswith("DRAFT")
+        and "INFORMED BY Run A" in head
+        and "NOT the evaluation set" in head
+    )
+    assert cc.validate_items(EXTRA) == []
+    groups = [cc.group_of(i) for i in EXTRA]
+    assert (groups.count("clear"), groups.count("vague"), groups.count("follow-up")) == (12, 4, 0)
+    assert all(len(i["question"].split()) >= 9 for i in EXTRA if cc.group_of(i) == "clear")
+
+
+def test_the_extra_set_overlaps_no_other_set_exactly():
+    assert not {i["id"] for i in EXTRA} & {i["id"] for i in ITEMS + HELD}
+    for other in (cc.EVAL_QUESTIONS, cc.THRESHOLD_SET, cc.DEFAULT_SET, cc.HELDOUT_SET):
+        assert cc.overlap_with(EXTRA, cc.texts_in_file(other)) == []
+
+
+def test_no_extra_item_nearly_copies_an_evaluation_or_other_practice_text():
+    others = []
+    for path in (cc.EVAL_QUESTIONS, cc.THRESHOLD_SET, cc.DEFAULT_SET, cc.HELDOUT_SET):
+        others += list(cc.texts_in_file(path))
+    for item in EXTRA:
+        mine = _tokens(item["question"])
+        for other in others:
+            theirs = set(other.split())
+            assert len(mine & theirs) / len(mine | theirs) < 0.6, (item["id"], other)
+
+
+def test_the_extra_dry_run_prints_the_warning_and_the_guard_table(dirs):
+    run = Run()
+    run.client = FakeClarifyClient(EXTRA)
+    assert run.go("--dry-run", "--set", "extra") == 0
+    assert cc.EXTRA_WARNING in run.text and "DRY RUN: FAKE DATA" in run.text
+
+
+def test_the_extra_set_refuses_a_live_run_without_confirm_live(dirs):
+    run = Run()
+    assert run.go("--set", "extra") == 2 and "--confirm-live" in run.text
+
+
+def test_a_live_extra_run_writes_both_the_guarded_and_unguarded_decisions(dirs):
+    class Asks(FakeClarifyClient):
+        def complete(self, system, user, *, json_mode=True):
+            import json
+
+            from app.generation.llm import LLMResult
+
+            reply = {"action": "clarify", "query": "q", "clarifying_question": "Which treatment?"}
+            return LLMResult(json.dumps(reply), "m", "stop", 300, 20, 320, 0, None, 5, 1, False)
+
+    run = Run(client=Asks(EXTRA))
+    assert run.go("--confirm-live", "--set", "extra") == 0
+    rows = [
+        json.loads(line)
+        for line in (dirs[1] / "clarify-check__clarify_v2__extra.jsonl").read_text().splitlines()
+    ]
+    assert len(rows) == 16 and all(r["actual_no_guard"] == "clarify" for r in rows)
+    named = [r for r in rows if r["question"] == "Does the treatment hurt a lot?"][0]
+    assert named["actual"] == "search" and named["guard_terms"] == ["treatment"]
+    summary = (dirs[1] / "clarify-check__clarify_v2__extra.md").read_text()
+    assert "on and off" in summary and "Clarifies the guard turned into searches" in summary

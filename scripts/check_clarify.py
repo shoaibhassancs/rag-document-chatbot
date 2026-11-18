@@ -40,10 +40,15 @@ from eval.state import ConfigMismatch, State, StateError
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SET = ROOT / "data" / "calibration" / "clarify_questions.jsonl"
 HELDOUT_SET = ROOT / "data" / "calibration" / "clarify_heldout.jsonl"
-SETS = {"tuning": DEFAULT_SET, "heldout": HELDOUT_SET}
+EXTRA_SET = ROOT / "data" / "calibration" / "clarify_extra.jsonl"
+SETS = {"tuning": DEFAULT_SET, "heldout": HELDOUT_SET, "extra": EXTRA_SET}
 HELDOUT_WARNING = (
     "HELD-OUT SET: use for the final decision only; never edit a prompt after looking at these "
     "results"
+)
+EXTRA_WARNING = (
+    "EXTRA SET (DRAFT, informed by Run A): measures the clarify guard (P2) on and off; "
+    "not an evaluation result"
 )
 STATE_DIR = ROOT / "eval" / ".state"  # git-ignored
 RESULTS_DIR = ROOT / "eval" / "results"
@@ -153,13 +158,18 @@ def turns_of(item: dict) -> list[Turn]:
 
 
 def classify(client, system: str, item: dict, max_chars: int) -> dict:
-    """One clarify call. Returns {"actual", "query", "clarifying_question", "error", "usage"}.
-    actual is "search", "clarify" or "error" (the app would fail open to a search; here it is
-    reported on its own). Raises LLMBusyError so the caller can stop; never returns a key."""
+    """One clarify call. Returns {"actual", "actual_no_guard", "guard_terms", "query",
+    "clarifying_question", "error", "usage"}. actual is "search", "clarify" or "error" (the app
+    would fail open to a search; here it is reported on its own) WITH the clarify guard (P2) as
+    the app applies it by default; actual_no_guard is the decision without the guard (the old
+    behaviour, comparable with older result files). Raises LLMBusyError so the caller can stop;
+    never returns a key."""
     turns = turns_of(item)
     user = build_clarify_message(turns, item["question"], max_chars)
     out = {
         "actual": "error",
+        "actual_no_guard": "error",
+        "guard_terms": None,
         "query": None,
         "clarifying_question": None,
         "error": None,
@@ -184,7 +194,10 @@ def classify(client, system: str, item: dict, max_chars: int) -> dict:
     except AnswerFormatError as exc:
         out["error"] = f"unusable reply ({exc})"
         return out
-    decision = decide(data, None, SessionState(turns=turns), item["question"])
+    state = SessionState(turns=turns)
+    decision = decide(data, None, state, item["question"], guard_enabled=True)
+    out["actual_no_guard"] = decide(data, None, state, item["question"], guard_enabled=False).action
+    out["guard_terms"] = decision.guard_override
     out["actual"] = decision.action
     out["query"] = decision.query
     out["clarifying_question"] = decision.clarifying_question
@@ -194,8 +207,10 @@ def classify(client, system: str, item: dict, max_chars: int) -> dict:
 # ----------------------------------------------------------------------------- scoring
 
 
-def summarize(rows: list[dict]) -> dict:
-    """Counts and misses from finished rows (each has group, expected_action, actual)."""
+def summarize(rows: list[dict], key: str = "actual") -> dict:
+    """Counts and misses from finished rows (each has group, expected_action and `key`, the field
+    holding the action: "actual" = as the app decides, "actual_no_guard" = without the guard)."""
+    rows = [{**r, "actual": r.get(key, r["actual"])} for r in rows]
 
     def count(group: str):
         sel = [r for r in rows if r["group"] == group]
@@ -251,6 +266,31 @@ def report_markdown(banner_text: str, rows: list[dict], dry_run: bool) -> str:
             + f": {r['question']!r}"
             + (f" -> asked {r['clarifying_question']!r}" if r.get("clarifying_question") else "")
         )
+    if any("actual_no_guard" in r for r in rows):
+        off = summarize(rows, "actual_no_guard")
+        lines += [
+            "",
+            "## The clarify guard (P2) on and off",
+            "",
+            "The table above is WITH the guard (the app default). Without it:",
+            "",
+            "| Measure | Guard on | Guard off |",
+            "| --- | --- | --- |",
+            f"| Clear wrongly clarified | {s['clear_wrongly_clarified']} of {s['clear']} | "
+            f"{off['clear_wrongly_clarified']} of {off['clear']} |",
+            f"| Vague questions caught | {s['vague_caught']} of {s['vague']} | "
+            f"{off['vague_caught']} of {off['vague']} |",
+            f"| Follow-ups handled as expected | {s['follow_ups_right']} of {s['follow_ups']} | "
+            f"{off['follow_ups_right']} of {off['follow_ups']} |",
+        ]
+        overridden = [r for r in rows if r.get("guard_terms")]
+        lines.append("")
+        lines.append(f"Clarifies the guard turned into searches: {len(overridden)}.")
+        for r in overridden:
+            lines.append(
+                f"- {r['qid']} ({r['group']}, expected {r['expected_action']}): terms "
+                f"{r['guard_terms']} already named in {r['question']!r}"
+            )
     lines += ["", "## Every item", ""]
     for r in rows:
         mark = "ok" if r["actual"] == r["expected_action"] else "MISS"
@@ -275,6 +315,7 @@ def banner(cfg: dict, run_id: str, dry_run: bool, calls: int, tokens: int, minut
         f"  clarify prompt     : {cfg['clarify_prompt_version']}",
         f"  item set           : {cfg['set']} ({cfg['tuning_set']}; DRAFT, not approved)",
         *(["  " + HELDOUT_WARNING] if cfg["set"] == "heldout" else []),
+        *(["  " + EXTRA_WARNING] if cfg["set"] == "extra" else []),
         f"  estimate           : about {calls} calls and about {tokens:,} reserved tokens "
         f"(real use is lower), about {minutes} minutes (paced by the tokens-per-minute limit)",
         "  note               : the rewrite model's daily token budget is shared with every "
@@ -346,8 +387,8 @@ def main(
         "items": len(items),
     }
     run_id = "clarify-check__" + re.sub(r"[^A-Za-z0-9._-]+", "_", version)
-    if args.which == "heldout":
-        run_id += "__heldout"  # the tuning set keeps its original names
+    if args.which in ("heldout", "extra"):
+        run_id += "__" + args.which  # the tuning set keeps its original names
     if args.tag:
         run_id += "__" + re.sub(r"[^A-Za-z0-9._-]+", "_", args.tag)
     per_minute = max(1, int(settings.groq_tokens_per_minute * settings.eval_limit_margin))

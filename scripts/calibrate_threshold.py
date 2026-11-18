@@ -8,7 +8,13 @@ score an answerable question needs: for each answerable question, the lowest of 
 its expected source files. The result is PROVISIONAL: the owner confirms it, and Milestone 5 tunes
 it against the evaluation set. These questions are NOT the evaluation set.
 
-Exit codes: 0 done, 1 problem with the input or database, 2 stopped by a Voyage account/rate error.
+Needs --confirm-live (it spends one Voyage request); --dry-run uses fakes and prints
+"DRY RUN: FAKE DATA". It also prints the GATE RULE table (INSTRUCTIONS_27, V3): the highest top-1
+among the practice unrelated and vague questions, plus 0.03, rounded up to two decimals, and the
+near-miss / out-of-scope questions that would newly reach the answer model at that gate.
+
+Exit codes: 0 done, 1 problem with the input or database, 2 stopped by a Voyage account/rate error
+or a missing --confirm-live.
 """
 
 import argparse
@@ -131,20 +137,128 @@ def render(rows: list[Row], threshold: float | None, lowest: Row | None, model: 
     return "\n".join(out) + "\n"
 
 
-def main(argv: list[str] | None = None) -> int:
+GATE_MARGIN = 0.03
+TRIPWIRE_GATE = 0.35
+CURRENT_GATE = 0.40
+
+
+def gate_rule(rows: list[Row], current: float = CURRENT_GATE) -> dict:
+    """The V3 gate rule. Ceiling = highest top-1 among the practice UNRELATED and VAGUE questions;
+    candidate gate = ceiling + 0.03 rounded UP to two decimals. `extra` = out-of-scope (near-miss
+    and injection) questions whose top-1 is at or above the candidate but below the current gate:
+    they would newly reach the answer model."""
+    quiet = [
+        r
+        for r in rows
+        if r.question.get("kind") == "unrelated" or r.question["category"] == "vague"
+    ]
+    if not quiet:
+        return {"ceiling": None, "candidate": None, "extra": [], "answerable_kept": None}
+    top = max(quiet, key=lambda r: r.top1)
+    candidate = math.ceil(round((top.top1 + GATE_MARGIN) * 100, 6)) / 100
+    oos = [r for r in rows if r.question["category"] == "out_of_scope"]
+    extra = [r for r in oos if candidate <= r.top1 < current]
+    answerable = [r for r in rows if r.question["category"] == "answerable"]
+    return {
+        "ceiling": top.top1,
+        "ceiling_id": top.question["id"],
+        "candidate": candidate,
+        "extra": [(r.question["id"], r.question.get("kind", ""), r.top1) for r in extra],
+        "already_through": sum(1 for r in oos if r.top1 >= current),
+        "out_of_scope": len(oos),
+        "answerable_kept": sum(1 for r in answerable if not r.missing and r.evidence >= candidate),
+        "answerable": len(answerable),
+        "quiet_refused": sum(1 for r in quiet if r.top1 < candidate),
+        "quiet": len(quiet),
+    }
+
+
+def render_gate_rule(rule: dict, current: float = CURRENT_GATE) -> str:
+    if rule["candidate"] is None:
+        return "## Gate rule\n\nNo unrelated or vague practice questions: cannot apply the rule.\n"
+    lines = [
+        "## Gate rule (V3)",
+        "",
+        f"- Highest top-1 among practice unrelated and vague questions: {rule['ceiling']:.3f} "
+        f"({rule['ceiling_id']}).",
+        f"- Candidate gate = ceiling + {GATE_MARGIN:.2f}, rounded up to two decimals: "
+        f"**{rule['candidate']:.2f}** (the config default stays {current:.2f} until the owner "
+        "approves this table).",
+        f"- Unrelated and vague questions still refused at the gate: {rule['quiet_refused']} of "
+        f"{rule['quiet']}.",
+        f"- Practice answerables whose needed sources are all kept: {rule['answerable_kept']} of "
+        f"{rule['answerable']}.",
+        f"- Out-of-scope questions already reaching the answer model at {current:.2f}: "
+        f"{rule['already_through']} of {rule['out_of_scope']}.",
+        f"- Extra out-of-scope or near-miss questions that would newly reach the answer model at "
+        f"{rule['candidate']:.2f}: {len(rule['extra'])}"
+        + (
+            " (" + ", ".join(f"{i} {k} {t:.3f}" for i, k, t in rule["extra"]) + ")"
+            if rule["extra"]
+            else ""
+        )
+        + ".",
+        "",
+        "TRIPWIRE: this table cannot show whether they are ANSWERED (that needs the answer model, "
+        "V4: run it with the candidate gate). If MORE THAN ONE extra question gets through AND is "
+        f"answered, use {TRIPWIRE_GATE:.2f} instead of {rule['candidate']:.2f}.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    settings=None,
+    embedder_factory=None,
+    search_factory=None,
+) -> int:
     parser = argparse.ArgumentParser(description="Propose a starting similarity threshold.")
     parser.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS)
     parser.add_argument("--report", type=Path, default=REPORT_PATH)
+    parser.add_argument("--dry-run", action="store_true", help="fakes only; not a result")
+    parser.add_argument("--confirm-live", action="store_true", help="required for a live run")
     args = parser.parse_args(argv)
 
-    settings = get_settings()
+    settings = settings or get_settings()
     try:
         questions = load_questions(args.questions)
     except (OSError, ValueError) as exc:
         print(f"Cannot read the questions: {exc}")
         return 1
+    if args.dry_run:
+        from eval.fakes import FakeQueryEmbedder, FakeSearcher
+
+        print("DRY RUN: FAKE DATA (fake embedder and fake search; the numbers mean nothing)")
+        files = sorted({f for q in questions for f in q.get("expected_sources", [])}) or ["a.md"]
+        return _finish(
+            settings, questions, FakeQueryEmbedder(), FakeSearcher(files), args, dry_run=True
+        )
+    if not args.confirm_live:
+        print(
+            "REFUSING to start: this makes ONE Voyage request; add --confirm-live "
+            "(or --dry-run to see the format with fake data)."
+        )
+        return 2
     try:
-        embedder = build_embedder(settings)
+        embedder = (embedder_factory or build_embedder)(settings)
+    except EmbeddingNotConfigured as exc:
+        print(f"Cannot embed: {exc}")
+        return 1
+    if search_factory is not None:
+        return _finish(settings, questions, embedder, search_factory(settings), args)
+    with connect(settings.database_url) as conn:
+
+        def run_search(vector):
+            return search(
+                conn, vector, top_k=settings.top_k, embedding_model=settings.embedding_model
+            )
+
+        return _finish(settings, questions, embedder, run_search, args)
+
+
+def _finish(settings, questions, embedder, run_search, args, dry_run: bool = False) -> int:
+    try:
         vectors = embedder.embed([q["question"] for q in questions], "query").vectors
     except EmbeddingNotConfigured as exc:
         print(f"Cannot embed: {exc}")
@@ -154,19 +268,21 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print(f"Embedded {len(questions)} questions in {embedder.requests} Voyage request(s).")
 
-    rows = []
-    with connect(settings.database_url) as conn:
-        for question, vector in zip(questions, vectors, strict=True):
-            hits = search(
-                conn, vector, top_k=settings.top_k, embedding_model=settings.embedding_model
-            )
-            rows.append(score(question, hits))
+    rows = [
+        score(question, run_search(vector))
+        for question, vector in zip(questions, vectors, strict=True)
+    ]
     if not any(r.hits for r in rows):
         print("The database has no embedded chunks. Run scripts.ingest_folder first.")
         return 1
     threshold, lowest = propose_threshold(rows)
     report = render(rows, threshold, lowest, settings.embedding_model)
+    report += "\n" + render_gate_rule(gate_rule(rows))
+    if dry_run:
+        report = "DRY RUN: FAKE DATA\n\n" + report
     print(report)
+    if dry_run:  # never overwrite the saved real report with fake numbers
+        return 0
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8")
     print(f"Saved to {args.report}")

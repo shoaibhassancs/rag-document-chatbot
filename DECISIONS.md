@@ -435,3 +435,31 @@ Owner-reported run, read by me from the result files (not run by me). Tuning set
 - **Not verified:** the judge fix for the clinic's name on E03 could not be checked in smoke2 (E03 was refused, so there is no faithfulness verdict). The repeat smoke (smoke3) re-checks it.
 - **Tests changed deliberately:** the tests of the old basis modes (used_chunks, top_chunk) were replaced by tests of `context_chunks`; the README test now looks for `context_chunks` instead of "under-reports".
 
+
+## Baseline (Run A) and the fix pass (Nov 18, 2026, owner and reviewer decisions; D-081, D-082)
+
+- **D-081 Baseline (Run A), kept as documented evidence, owner-run Nov 17-18, 2026.** Run id `openai_gpt-oss-20b__answer_v2__clarify_v2__runA-20b`: answer `openai/gpt-oss-20b` (`answer_v2`, fallback 120b), clarify `openai/gpt-oss-120b` (`clarify_v2`), gate 0.40, top_k 5, judge `qwen/qwen3.8-27b` (v1 correctness, v2 faithfulness), 40 approved questions, one repeat. Result table as printed in `eval/results/..runA-20b.md` (owner has NOT yet hand-checked the verdicts; the README quotes none of these):
+
+| Metric | Run A | n | Target |
+|---|---|---|---|
+| Retrieval hit rate (all expected sources in top 5) | 69.0% | 29 | 90% |
+| Retrieval hit rate (any expected source) | 72.4% | 29 | |
+| Faithfulness | 100.0% | 13 | 90% |
+| Answer correctness | 39.3% | 28 | 85% |
+| Refusal accuracy | 69.4% | 36 | 95% |
+| Status accuracy | 55.0% | 40 | reported |
+| Latency p50 / p95 | 1.6 s / 2.6 s | 40 | under 3 s (p50) |
+
+  Status by category: answerable 13 of 29 answered (44.8%), out of scope 5 of 7 refused (71.4%), vague 4 of 4 clarified. 12 answers were judged for correctness (11 correct); E05's correctness verdict was lost to a judge error (fixed in D-082).
+  **Failure grouping (diagnosis in `handoff/PLAN_Q26.md`, question ids only):** 7 clear questions wrongly clarified (E08, E16, E20, E22, E23, E24, E26); 7 refused below the 0.40 gate at similarity 0.33 to 0.39 (E03, E04, E06, E15, E18, E19, E31); 2 refused above the gate (E17: the chunk with the answer was not in the top 5; E27: the right chunk was rank 1 and the 20b still said "not answerable"); E21 answered but incomplete (second source not retrieved); E32 (another clinic's hours) answered with BrightSmile's hours because the answer model only ever received the rewrite; E33 clarified instead of refused. Of the 9 questions without all sources in the top 5, 7 were clarified (no search) and 2 are real retrieval misses (E17, E21). Per-question statuses: `eval/results/runA-20b-summary.md` (committable; no answers).
+  Original-vs-rewrite diagnostic (Voyage only, 9 questions): the rewrite lowered the expected-source similarity in 5 of 7 below-gate cases, but with the original wording only E31 clears 0.40 with the right source; E03, E04, E18, E19 stay at 0.30 to 0.39 either way.
+  **Contamination:** the owner and Claude have seen these results, so every fix below is informed by them and a second run on the same 40 questions is not a held-out estimate.
+
+- **D-082 The fix pass (owner approved PLAN_Q26 on Nov 18, 2026; ONE pass, no second iteration). BUILT with mocked tests only; NOT verified live.** All defaults below keep today's behaviour unless stated.
+  - **P1a (always on):** with no history the answer model receives the user's original message; with history it receives the standalone rewrite (as before). `PreparedQuery.answer_question`. Reason: the answer model never saw the original wording (root cause of E32).
+  - **P1b (flag `SEARCH_ORIGINAL_WHEN_NO_HISTORY`, default false):** with no history, search with the original words instead of the rewrite. May be switched on only if V1 shows the originals keep all 16 practice answerables' expected sources in the top 5 and the owner approves. The rewrite is still recorded (`standalone_query`; the searched text is `searched_query`).
+  - **P2 (flag `CLARIFY_GUARD_ENABLED`, default true), owner approved knowing the trade-off:** a model clarify whose question asks only about terms the message or history already names (crude stems: plural and 's') becomes a search; a clarify with no content term is left alone. The override is logged in the log row's `llm_usage.clarify.guard_override` (no migration). On recorded practice outputs (replayed in `tests/test_clarify_guard.py`): vague caught 16 of 16 and 8 of 8, clear wrongly stopped 0 of 36 and 0 of 18 (was 1 of 36), follow-ups 8 of 12 (was 7); it changes exactly S36, F05, F08, HF04. **Known cost:** a correct clarify on a vague message containing a generic noun ("the procedure") will usually become a search. The bot asks only when the question has no subject, not whenever it is vague.
+  - **P3 (gate) NOT changed:** the default stays 0.40 until the owner approves V3's table. Rule: new gate = highest top-1 among practice unrelated and vague questions + 0.03, rounded up to two decimals; if V3 shows more than one extra practice out-of-scope or near-miss question getting through AND being answered, use 0.35.
+  - **P4 only if V4 triggers it** (an entity-mismatch practice item answered wrongly): then a new `prompts/answer_v3.txt`, after telling the owner.
+  - **Bug fixed:** a judge call that ended in an error is no longer saved as finished; a resume retries it and the newest verdict is the one reported (Run A's E05).
+  - **Verification written, not run:** V1 to V4 scripts and `handoff/VERIFY_COMMANDS.md` (owner runs them). New practice items are DRAFT and informed by Run A.

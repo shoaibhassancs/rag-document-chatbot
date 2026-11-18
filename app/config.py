@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     # one clarifying question. False = skip it and search with the user's message as written.
     clarify_enabled: bool = True
     clarify_prompt_version: str = "clarify_v2"  # D-078
+    # P1b (INSTRUCTIONS_27): with NO history, search with the user's own words instead of the
+    # model's rewrite. OFF until the owner approves the V1 result (VERIFY_COMMANDS.md).
+    search_original_when_no_history: bool = False
+    # P2 (R4'): ignore a model clarify that asks about a term the message or history already names.
+    clarify_guard_enabled: bool = True
     history_turns: int = 4  # past exchanges given to the clarify call
     history_message_max_chars: int = 300  # each past message is cut to this length in the prompt
     session_ttl_hours: int = 24  # a session idle longer than this is forgotten

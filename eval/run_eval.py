@@ -77,6 +77,8 @@ def config_snapshot(settings: Settings, questions_path: Path, judge_calls: int) 
         "rewrite_model": settings.rewrite_llm_model,
         "clarify_enabled": settings.clarify_enabled,
         "clarify_prompt_version": settings.clarify_prompt_version,
+        "search_original_when_no_history": settings.search_original_when_no_history,
+        "clarify_guard_enabled": settings.clarify_guard_enabled,
         "judge_model": settings.judge_llm_model,
         "judge_prompt_versions": {
             "correctness": settings.judge_correctness_prompt_version,
@@ -111,6 +113,9 @@ def banner(cfg: dict, run_id: str, dry_run: bool, draft: bool, repeat: int) -> s
         f"{cfg['answer_fallback_model'] if cfg['answer_fallback_enabled'] else 'off'}",
         f"  rewrite model      : {cfg['rewrite_model']} (clarify prompt "
         f"{cfg['clarify_prompt_version']}, {'on' if cfg['clarify_enabled'] else 'OFF'})",
+        f"  clarify guard (P2) : {'on' if cfg.get('clarify_guard_enabled', False) else 'off'}; "
+        f"search original words with no history (P1b): "
+        f"{'on' if cfg.get('search_original_when_no_history', False) else 'off'}",
         f"  judge model        : {cfg['judge_model']} (prompts {cfg['judge_prompt_versions']})",
         f"  similarity threshold: {cfg['similarity_threshold']}  top_k: {cfg['top_k']}",
         f"  embedding model    : {cfg['embedding_model']}",
@@ -198,6 +203,18 @@ class RealPipeline:
 
 
 # ----------------------------------------------------------------------------- the runner
+
+NO_CHUNKS_NOTE = "no chunks to judge against"
+
+
+def judge_unfinished(record: dict) -> bool:
+    """True when a judge call failed (an error other than the harmless no-chunks note), so the
+    verdict is incomplete and must be retried on resume."""
+    for part in ("correctness", "faithfulness"):
+        error = (record.get(part) or {}).get("error")
+        if error and error != NO_CHUNKS_NOTE:
+            return True
+    return False
 
 
 class Runner:
@@ -290,6 +307,8 @@ class Runner:
             "usage": usage,
             "clarify_action": result.clarify_action,
             "standalone_query": result.standalone_query,
+            "searched_query": result.searched_query,
+            "clarify_guard": (result.clarify_usage or {}).get("guard_override"),
             "setup_status": setup_status,
             "setup_not_answered": bool(q.get("setup")) and setup_status != "answered",
             "error": result.error,
@@ -325,7 +344,13 @@ class Runner:
 
     # ---- judge phase
     def run_judge(self, repeat: int) -> int:
-        judged = self.state.done("judge")
+        # A verdict that ended in a judge error is NOT finished: a resume retries it (the
+        # newer record then replaces it in the report). The "no chunks" note is not an error.
+        judged = {
+            (r["qid"], r["run"])
+            for r in self.state.records
+            if r.get("kind") == "judge" and not judge_unfinished(r)
+        }
         count = 0
         for rec in list(self.state.records):
             if rec.get("kind") != "answer" or rec["run"] > repeat:
@@ -347,7 +372,7 @@ class Runner:
         out["faithfulness"]["basis"] = rec.get("faithfulness_basis")
         out["faithfulness"]["chunk_ids"] = [c["chunk_id"] for c in rec.get("basis_chunks") or []]
         if not chunks:
-            out["faithfulness"]["error"] = "no chunks to judge against"
+            out["faithfulness"]["error"] = NO_CHUNKS_NOTE
         try:
             if self.cfg["judge_calls"] == 1 and chunks:
                 self.paced(self.s.judge_llm_model, self.estimate_judge(rec, chunks, "combined"))

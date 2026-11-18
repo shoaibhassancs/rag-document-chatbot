@@ -4,8 +4,9 @@ call `ChatService.chat`, so projects 3 and 6 can reuse it.
 Flow:  remember -> prepare query (clarify or standalone query) -> embed -> search -> threshold ->
 answer -> citations -> save the turn and write the log.
 The prepare step is the clarify-before-retrieving hook (app/services/clarify.py). The answer call
-receives the standalone query, so a follow-up such as "and on Saturdays?" is answered as a full
-question. Memory and logging are best-effort: a failure there never changes the reply.
+receives the user's own message when there is no history, and the standalone query when there is
+(so a follow-up such as "and on Saturdays?" is answered as a full question).
+Memory and logging are best-effort: a failure there never changes the reply.
 
 Statuses: answered | refused | clarify | error.
   refused  no chunk passed the threshold (no LLM call is made), or the model said the chunks do
@@ -42,6 +43,11 @@ class PreparedQuery:
     clarifying_question: str | None = None
     action: str = "passthrough"  # passthrough | search | clarify | search_failed_open
     usage: dict = field(default_factory=dict)  # the clarify call's model and token use
+    # P1a: the question the ANSWER model receives. None = the same as search_query. With no history
+    # it is the user's original message; with history it is the standalone rewrite.
+    answer_question: str | None = None
+    # The model's own rewrite, kept for the log when it was not the text that was searched.
+    rewrite_query: str | None = None
 
 
 class QueryPreparer(Protocol):
@@ -74,7 +80,10 @@ class ChatResult:
     warnings: list[str] = field(default_factory=list)
     error: str | None = None  # short internal reason; never shown to the user
     raw_reply: str | None = None  # the model's raw text, for smoke tests and evaluation only
-    standalone_query: str | None = None  # what was searched (after the clarify step)
+    standalone_query: str | None = (
+        None  # the clarify step's rewrite (what was searched, unless P1b)
+    )
+    searched_query: str | None = None  # the exact text that was embedded and searched
     clarify_action: str | None = None
     clarify_usage: dict = field(default_factory=dict)
     used_chunk_ids: list[int] = field(default_factory=list)
@@ -111,7 +120,8 @@ class ChatService:
         result = self._run(session_id, message, timings, trace)
         prepared: PreparedQuery | None = trace.get("prepared")
         if prepared is not None:
-            result.standalone_query = prepared.search_query
+            result.standalone_query = prepared.rewrite_query or prepared.search_query
+            result.searched_query = prepared.search_query
             result.clarify_action = prepared.action
             result.clarify_usage = prepared.usage
         result.timings_ms = {**timings, "total": _ms(started)}
@@ -196,7 +206,7 @@ class ChatService:
                 return ChatResult(s.refusal_message, "refused", retrieved=retrieved)
 
             t = time.perf_counter()
-            answer = self._answerer.answer(prepared.search_query, hits)
+            answer = self._answerer.answer(prepared.answer_question or prepared.search_query, hits)
             timings["llm"] = _ms(t)
         except (EmbeddingError, LLMError, AnswerFormatError) as exc:
             log.error("chat_failed %s: %s", type(exc).__name__, exc)

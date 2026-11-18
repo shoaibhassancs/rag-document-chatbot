@@ -33,3 +33,4 @@ At the start of every session, read @SPEC.md and @WORKFLOW.md and follow them. L
 - Embedding dimension and model come from config, never hard-coded.
 - Models: the clarify/rewrite step runs on openai/gpt-oss-120b with prompt clarify_v2 (D-078); the answer model is openai/gpt-oss-20b (provisional until the M5 evaluation); the judge is qwen/qwen3.8-27b.
 - Free-tier limits: Groq 8K tokens/min per model; Voyage 3 requests/min and 10K tokens/min.
+- Design principle (owner, Nov 18, 2026): the free models are weak, so when diagnosing a failure say whether it is a design flaw, a weak-model limit or both, and do not blame the model by default. Prefer code-side guards that fail open over more prompt tuning, and accept free-model limits in a production-style chatbot, documenting them honestly.

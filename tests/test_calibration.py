@@ -79,3 +79,57 @@ def test_bad_question_files_are_reported(tmp_path):
     bad.write_text(json.dumps({"id": "x"}) + "\n")
     with pytest.raises(ValueError, match="missing 'category'"):
         load_questions(bad)
+
+
+# ----------------------------------------------------------------------------- the V3 gate rule
+
+
+def _row(id, category, kind, top1, evidence=None):
+    from scripts.calibrate_threshold import Row
+
+    question = {"id": id, "category": category, "kind": kind, "question": "?"}
+    return Row(question, [hit("x.md", top1)], top1, evidence=evidence)
+
+
+def test_the_gate_rule_uses_the_highest_unrelated_or_vague_top1_plus_0_03_rounded_up():
+    from scripts.calibrate_threshold import gate_rule
+
+    rows = [
+        _row("A1", "answerable", "direct", 0.62, evidence=0.62),
+        _row("O01", "out_of_scope", "unrelated", 0.300),  # the ceiling
+        _row("V01", "vague", "vague", 0.294),
+        _row("O07", "out_of_scope", "near_miss", 0.369),  # newly reaches the answer model
+        _row("O02", "out_of_scope", "near_miss", 0.570),  # already reached it at 0.40
+    ]
+    rule = gate_rule(rows)
+    assert rule["ceiling"] == 0.300 and rule["candidate"] == 0.33
+    assert [e[0] for e in rule["extra"]] == ["O07"] and rule["already_through"] == 1
+    assert rule["quiet_refused"] == 2 and rule["answerable_kept"] == 1
+
+
+def test_the_gate_rule_rounds_up_not_to_nearest():
+    from scripts.calibrate_threshold import gate_rule
+
+    rows = [_row("O01", "out_of_scope", "unrelated", 0.301)]
+    assert gate_rule(rows)["candidate"] == 0.34  # 0.331 rounds UP to 0.34
+
+
+def test_the_gate_report_names_the_tripwire_and_keeps_the_default():
+    from scripts.calibrate_threshold import gate_rule, render_gate_rule
+
+    text = render_gate_rule(gate_rule([_row("O01", "out_of_scope", "unrelated", 0.300)]))
+    assert "0.33" in text and "TRIPWIRE" in text and "0.35" in text and "stays 0.40" in text
+
+
+def test_calibration_refuses_a_live_run_without_confirm_live_and_dry_run_prints_the_label(
+    capsys,
+):
+    from app.config import Settings
+    from scripts import calibrate_threshold as ct
+
+    settings = Settings(_env_file=None)  # never the developer's real .env
+    assert ct.main([], settings=settings) == 2
+    assert "--confirm-live" in capsys.readouterr().out
+    assert ct.main(["--dry-run"], settings=settings) == 0
+    out = capsys.readouterr().out
+    assert "DRY RUN: FAKE DATA" in out and "Gate rule" in out

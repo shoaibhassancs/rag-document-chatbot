@@ -566,6 +566,32 @@ def test_a_judge_failure_is_recorded_as_an_error_and_never_as_a_score(dirs):
     assert "correctness ['E18']" in summary and "| Answer correctness | 100.0% | 1 |" in summary
 
 
+def test_a_resume_retries_a_judge_verdict_that_ended_in_an_error_and_only_that_one(dirs):
+    # Added (INSTRUCTIONS_27): a judge error must not count as finished (Run A lost a verdict).
+    h = Harness(judge=FlakyJudge())
+    h.run(*LIVE, "--ids", "E17,E18")
+    run_id = the_run_id(h)
+    assert "E18" in (dirs[1] / f"{run_id}.md").read_text()  # reported as unjudged
+    h.judge = FakeJudge()
+    h.run(*LIVE, "--ids", "E17,E18")
+    assert h.judge.calls == ["correctness", "faithfulness"]  # only E18 again
+    state = read_state(dirs, run_id)
+    e18 = [r for r in state.records if r["kind"] == "judge" and r["qid"] == "E18"]
+    assert len(e18) == 2 and e18[0]["correctness"]["error"] and e18[1]["correctness"]["score"] == 1
+    assert state.get("judge", "E18", 1) is e18[1]  # the newest verdict is the one reported
+    assert "correctness ['E18']" not in (dirs[1] / f"{run_id}.md").read_text()
+    h.run(*LIVE, "--ids", "E17,E18")
+    assert h.judge.calls == ["correctness", "faithfulness"]  # now everything is finished
+
+
+def test_judge_unfinished_ignores_the_no_chunks_note_and_flags_real_errors():
+    ok = {"correctness": {"error": None}, "faithfulness": {"error": "no chunks to judge against"}}
+    bad = {"correctness": {"error": None}, "faithfulness": {"error": "unusable judge reply"}}
+    old_style = {"correctness": {"error": "429 busy"}, "faithfulness": {"error": None}}
+    assert not run_eval.judge_unfinished(ok)
+    assert run_eval.judge_unfinished(bad) and run_eval.judge_unfinished(old_style)
+
+
 # ----------------------------------------------------------------------------- state file
 
 
@@ -625,3 +651,11 @@ def test_the_plan_estimate_and_helpers():
     assert run_eval.run_id_for(cfg, "t1").endswith("__t1")
     assert run_eval.missing_keys(make_settings()) == []
     assert run_eval.missing_keys(make_settings(groq_api_key=None)) == ["GROQ_API_KEY"]
+
+
+def test_the_config_snapshot_and_banner_show_the_fix_pass_flags(dirs):
+    # Added (INSTRUCTIONS_27): a run records whether P1b and the clarify guard were on.
+    cfg = run_eval.config_snapshot(make_settings(), run_eval.DEFAULT_QUESTIONS, 2)
+    assert cfg["search_original_when_no_history"] is False and cfg["clarify_guard_enabled"] is True
+    text = run_eval.banner(cfg, "rid", False, False, 1)
+    assert "clarify guard (P2) : on" in text and "(P1b): off" in text

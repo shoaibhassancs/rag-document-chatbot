@@ -93,7 +93,8 @@ class State:
         return {(r["qid"], r["run"]) for r in self.records if r.get("kind") == kind}
 
     def get(self, kind: str, qid: str, run: int) -> dict | None:
-        for r in self.records:
+        """The NEWEST matching record (a retried judge verdict replaces the failed one)."""
+        for r in reversed(self.records):
             if r.get("kind") == kind and r["qid"] == qid and r["run"] == run:
                 return r
         return None

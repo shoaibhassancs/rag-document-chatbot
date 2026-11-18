@@ -151,3 +151,61 @@ class FakeClarifyClient:
         return LLMResult(
             json.dumps(reply), "fake-rewrite-model", "stop", 300, 20, 320, 0, None, 5, 1, False
         )
+
+
+class FakeQueryEmbedder:
+    """Stands in for the Voyage embedder in the V1/V3/V4 verification scripts' --dry-run and tests.
+    The vector is a deterministic function of the text; `requests` counts embed calls."""
+
+    def __init__(self):
+        self.requests = 0
+        self.texts: list[str] = []
+
+    def embed(self, texts: list[str], input_type: str, max_wait: float | None = None):
+        import hashlib
+        from types import SimpleNamespace
+
+        self.requests += 1
+        self.texts += list(texts)
+        vectors = [[b / 255 for b in hashlib.sha256(t.encode()).digest()[:8]] for t in texts]
+        return SimpleNamespace(vectors=vectors, tokens=sum(len(t) // 4 + 1 for t in texts))
+
+
+class FakeSearcher:
+    """A fake `search(vector) -> list[Hit]` over a fixed list of file names. The similarities are
+    a deterministic function of the vector, between 0.20 and 0.75, sorted high to low."""
+
+    def __init__(self, files: list[str], top_k: int = 5):
+        self._files = files
+        self._top_k = top_k
+
+    def __call__(self, vector):
+        from app.retrieval.search import Hit
+
+        seed = sum(int(v * 1000) for v in vector)
+        picked = [self._files[(seed + 3 * n) % len(self._files)] for n in range(self._top_k)]
+        sims = sorted(((seed * (n + 7)) % 55) / 100 + 0.20 for n in range(self._top_k))[::-1]
+        return [
+            Hit(n + 1, "doc", f, None, None, f"fake text {n}", round(s, 4))
+            for n, (f, s) in enumerate(zip(picked, sims, strict=True))
+        ]
+
+
+class FakeGroundedAnswerer:
+    """Stands in for the answer model in scripts.check_answerer --dry-run and tests. Refuses every
+    question unless its text contains one of `answer_when` (then it answers using the first hit)."""
+
+    prompt_version = "fake"
+
+    def __init__(self, answer_when: tuple[str, ...] = ()):
+        self._answer_when = answer_when
+        self.calls: list[tuple[str, int]] = []
+
+    def answer(self, question: str, hits: list):
+        from app.generation.answer import Answer
+        from app.generation.llm import LLMResult
+
+        self.calls.append((question, len(hits)))
+        yes = any(w in question for w in self._answer_when)
+        llm = LLMResult("{}", "fake-answer-model", "stop", 300, 20, 320, 0, None, 5, 1, False)
+        return Answer(yes, "Fake answer." if yes else "", hits[:1] if yes else [], llm)

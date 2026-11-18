@@ -84,10 +84,12 @@ def test_bad_question_files_are_reported(tmp_path):
 # ----------------------------------------------------------------------------- the V3 gate rule
 
 
-def _row(id, category, kind, top1, evidence=None):
+def _row(id, category, kind, top1, evidence=None, marked=False):
     from scripts.calibrate_threshold import Row
 
     question = {"id": id, "category": category, "kind": kind, "question": "?"}
+    if marked:
+        question["gate_should_refuse"] = True
     return Row(question, [hit("x.md", top1)], top1, evidence=evidence)
 
 
@@ -96,8 +98,8 @@ def test_the_gate_rule_uses_the_highest_unrelated_or_vague_top1_plus_0_03_rounde
 
     rows = [
         _row("A1", "answerable", "direct", 0.62, evidence=0.62),
-        _row("O01", "out_of_scope", "unrelated", 0.300),  # the ceiling
-        _row("V01", "vague", "vague", 0.294),
+        _row("O01", "out_of_scope", "unrelated", 0.300, marked=True),  # the ceiling
+        _row("V01", "vague", "vague", 0.294, marked=True),
         _row("O07", "out_of_scope", "near_miss", 0.369),  # newly reaches the answer model
         _row("O02", "out_of_scope", "near_miss", 0.570),  # already reached it at 0.40
     ]
@@ -110,15 +112,17 @@ def test_the_gate_rule_uses_the_highest_unrelated_or_vague_top1_plus_0_03_rounde
 def test_the_gate_rule_rounds_up_not_to_nearest():
     from scripts.calibrate_threshold import gate_rule
 
-    rows = [_row("O01", "out_of_scope", "unrelated", 0.301)]
+    rows = [_row("O01", "out_of_scope", "unrelated", 0.301, marked=True)]
     assert gate_rule(rows)["candidate"] == 0.34  # 0.331 rounds UP to 0.34
 
 
 def test_the_gate_report_names_the_tripwire_and_keeps_the_default():
     from scripts.calibrate_threshold import gate_rule, render_gate_rule
 
-    text = render_gate_rule(gate_rule([_row("O01", "out_of_scope", "unrelated", 0.300)]))
-    assert "0.33" in text and "TRIPWIRE" in text and "0.35" in text and "stays 0.40" in text
+    text = render_gate_rule(
+        gate_rule([_row("O01", "out_of_scope", "unrelated", 0.300, marked=True)])
+    )
+    assert "0.33" in text and "TRIPWIRE" in text and "0.35" in text and "old gate was 0.40" in text
 
 
 def test_calibration_refuses_a_live_run_without_confirm_live_and_dry_run_prints_the_label(
@@ -133,3 +137,34 @@ def test_calibration_refuses_a_live_run_without_confirm_live_and_dry_run_prints_
     assert ct.main(["--dry-run"], settings=settings) == 0
     out = capsys.readouterr().out
     assert "DRY RUN: FAKE DATA" in out and "Gate rule" in out
+
+
+def test_the_gate_rule_on_the_saved_real_v3_table_gives_0_33_not_0_50():
+    """The real V3 table (practice data). The dental-sounding 'unrelated' question (0.466) must not
+    raise the ceiling: only the items marked gate_should_refuse count."""
+    from pathlib import Path
+
+    from scripts.calibrate_threshold import Row, gate_rule, render_gate_rule
+
+    path = Path(__file__).parent / "fixtures" / "calibration_v3_table.jsonl"
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        d = json.loads(line)
+        question = {"id": d["id"], "category": d["category"], "kind": d["kind"], "question": "?"}
+        if d["gate_should_refuse"]:
+            question["gate_should_refuse"] = True
+        rows.append(Row(question, [hit("x.md", d["top1"])], d["top1"], evidence=d["evidence"]))
+    rule = gate_rule(rows)
+    assert rule["ceiling"] == 0.300 and rule["candidate"] == 0.33
+    assert rule["quiet"] == 5 and rule["quiet_refused"] == 5
+    assert rule["answerable_kept"] == 16
+    assert [e[0] for e in rule["extra"]] == ["O07"]
+    text = render_gate_rule(rule)
+    assert "0.50" not in text and "O07" in text and "TRIPWIRE" in text
+
+
+def test_the_marked_practice_items_are_exactly_the_unrelated_and_vague_ones():
+    from scripts.calibrate_threshold import DEFAULT_QUESTIONS
+
+    marked = {x["id"] for x in load_questions(DEFAULT_QUESTIONS) if x.get("gate_should_refuse")}
+    assert marked == {"O01", "O03", "O06", "V01", "V02"}

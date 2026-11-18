@@ -72,6 +72,7 @@ def db_url():
 def settings(db_url) -> Settings:
     return Settings(
         _env_file=None,
+        similarity_threshold=None,  # fake embeddings: tests set their own gate when they need one
         database_url=db_url,
         app_api_key="test-app-key",
         voyage_api_key="fake-voyage-key",

@@ -81,7 +81,9 @@ def test_a_blank_similarity_threshold_means_not_set():
     assert Settings(_env_file=None, similarity_threshold="").similarity_threshold is None
     assert Settings(_env_file=None, similarity_threshold=" ").similarity_threshold is None
     assert Settings(_env_file=None, similarity_threshold="0.55").similarity_threshold == 0.55
-    assert Settings(_env_file=None).similarity_threshold is None
+    assert Settings(_env_file=None).similarity_threshold == 0.33  # D-083
+    assert Settings(_env_file=None).search_original_when_no_history is True
+    assert Settings(_env_file=None).clarify_guard_enabled is True
 
 
 def test_reply_texts_and_llm_client_limits_have_defaults_and_can_be_overridden():

@@ -656,6 +656,6 @@ def test_the_plan_estimate_and_helpers():
 def test_the_config_snapshot_and_banner_show_the_fix_pass_flags(dirs):
     # Added (INSTRUCTIONS_27): a run records whether P1b and the clarify guard were on.
     cfg = run_eval.config_snapshot(make_settings(), run_eval.DEFAULT_QUESTIONS, 2)
-    assert cfg["search_original_when_no_history"] is False and cfg["clarify_guard_enabled"] is True
+    assert cfg["search_original_when_no_history"] is True and cfg["clarify_guard_enabled"] is True
     text = run_eval.banner(cfg, "rid", False, False, 1)
-    assert "clarify guard (P2) : on" in text and "(P1b): off" in text
+    assert "clarify guard (P2) : on" in text and "(P1b): on" in text

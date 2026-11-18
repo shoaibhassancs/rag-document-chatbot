@@ -91,10 +91,11 @@ class Settings(BaseSettings):
 
     # --- Retrieval and answering ---
     top_k: int = 5
-    # PROVISIONAL (Milestone 3): chunks scoring below this cosine similarity are dropped, and if
-    # none are left the question is refused without calling the LLM. Blank means "not set":
-    # nothing is dropped and the service warns. Calibrated with scripts/calibrate_threshold.py.
-    similarity_threshold: float | None = None
+    # PROVISIONAL: chunks scoring below this cosine similarity are dropped, and if none are left
+    # the question is refused without calling the LLM. 0.33 = highest top-1 of the truly unrelated
+    # and vague practice questions (0.300) + 0.03 (D-083; a thin margin). Blank in .env = "not set":
+    # nothing is dropped and the service warns. See scripts/calibrate_threshold.py.
+    similarity_threshold: float | None = 0.33
     prompts_dir: Path = Path(__file__).resolve().parent.parent / "prompts"
     answer_prompt_version: str = "answer_v2"
     # Fixed reply texts. Configurable so a client can change the wording without code changes.
@@ -107,8 +108,8 @@ class Settings(BaseSettings):
     clarify_enabled: bool = True
     clarify_prompt_version: str = "clarify_v2"  # D-078
     # P1b (INSTRUCTIONS_27): with NO history, search with the user's own words instead of the
-    # model's rewrite. OFF until the owner approves the V1 result (VERIFY_COMMANDS.md).
-    search_original_when_no_history: bool = False
+    # model's rewrite. ON since the V1 practice check passed (D-083).
+    search_original_when_no_history: bool = True
     # P2 (R4'): ignore a model clarify that asks about a term the message or history already names.
     clarify_guard_enabled: bool = True
     history_turns: int = 4  # past exchanges given to the clarify call

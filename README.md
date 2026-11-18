@@ -113,6 +113,8 @@ All settings live in `.env` (git-ignored); `.env.example` lists every name with 
 
 ## Evaluation
 
+**How to read the results.** Two runs on the same 40 questions will be shown: the baseline (Run A) and the result after one general fix pass (runA2). The fixes were chosen after looking at Run A's failures, so the second run is not a held-out estimate of how the bot does on new questions; it shows what changed on a set that informed the changes. The numbers are in the table below once the runs are done.
+
 TBD: from the real evaluation. The harness, rubric and the owner-approved question set are in `eval/`; no evaluation has been run and no score exists. Retrieval hit rate: TBD: from the real evaluation. Faithfulness: TBD: from the real evaluation. Answer correctness: TBD: from the real evaluation. Refusal accuracy: TBD: from the real evaluation. Latency: TBD: from the real evaluation.
 
 ## Tests
@@ -129,6 +131,8 @@ Tests mock Groq and Voyage and never call them. Database tests use a throwaway `
 - Free-tier limits (Groq and Voyage) make throughput low: about two questions a minute, because Voyage's free plan allows 3 requests a minute and each Groq model has its own per-minute and per-day token limits (listed in `SPEC.md`). A busy period gives a friendly "try again" reply, not an answer.
 - The clarify step sometimes asks a narrower question when a follow-up was already clear from the conversation (7 of 12 follow-ups handled as expected in the practice checks; those checks are not the evaluation). Clear questions and vague questions were handled correctly in those checks.
 - Answers can vary between runs: model outputs are not exactly repeatable even at temperature 0, and a similar question can be answered once and refused another time when the search query wording changes.
+- A vague message that names a generic subject (for example "the procedure") is searched instead of answered with a clarifying question: the bot asks only when the question has no subject, not whenever it is vague.
+- The models are free-tier models and weaker than paid ones: expect more refusals of answerable questions and more variation than a paid model would give.
 - The similarity threshold and the answer prompt were tuned on a small calibration set; the real test is the evaluation set (TBD: from the real evaluation).
 - The answer model choice between `gpt-oss-20b` and `gpt-oss-120b` is provisional until the evaluation is run on both.
 - Chunks are smaller than the original target size (a decision recorded in `DECISIONS.md`).

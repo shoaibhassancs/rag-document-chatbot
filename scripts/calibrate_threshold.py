@@ -143,15 +143,13 @@ CURRENT_GATE = 0.40
 
 
 def gate_rule(rows: list[Row], current: float = CURRENT_GATE) -> dict:
-    """The V3 gate rule. Ceiling = highest top-1 among the practice UNRELATED and VAGUE questions;
-    candidate gate = ceiling + 0.03 rounded UP to two decimals. `extra` = out-of-scope (near-miss
-    and injection) questions whose top-1 is at or above the candidate but below the current gate:
-    they would newly reach the answer model."""
-    quiet = [
-        r
-        for r in rows
-        if r.question.get("kind") == "unrelated" or r.question["category"] == "vague"
-    ]
+    """The V3 gate rule. Ceiling = highest top-1 among the practice questions marked
+    `gate_should_refuse` (the truly unrelated and vague ones; a dental-sounding question such as a
+    pet's bad breath is `unrelated` but is NOT marked, because no gate can separate it from the
+    answerables: the answer prompt must refuse it); candidate gate = ceiling + 0.03 rounded UP to
+    two decimals. `extra` = out-of-scope (near-miss and injection) questions whose top-1 is at or
+    above the candidate but below the current gate: they would newly reach the answer model."""
+    quiet = [r for r in rows if r.question.get("gate_should_refuse")]
     if not quiet:
         return {"ceiling": None, "candidate": None, "extra": [], "answerable_kept": None}
     top = max(quiet, key=lambda r: r.top1)
@@ -179,16 +177,17 @@ def render_gate_rule(rule: dict, current: float = CURRENT_GATE) -> str:
     lines = [
         "## Gate rule (V3)",
         "",
-        f"- Highest top-1 among practice unrelated and vague questions: {rule['ceiling']:.3f} "
+        f"- Highest top-1 among the questions marked gate_should_refuse (truly unrelated, vague): "
+        f"{rule['ceiling']:.3f} "
         f"({rule['ceiling_id']}).",
         f"- Candidate gate = ceiling + {GATE_MARGIN:.2f}, rounded up to two decimals: "
-        f"**{rule['candidate']:.2f}** (the config default stays {current:.2f} until the owner "
-        "approves this table).",
-        f"- Unrelated and vague questions still refused at the gate: {rule['quiet_refused']} of "
+        f"**{rule['candidate']:.2f}** (the old gate was {current:.2f}; the default in "
+        "app/config.py is the owner-approved value).",
+        f"- Marked questions still refused at the gate: {rule['quiet_refused']} of "
         f"{rule['quiet']}.",
         f"- Practice answerables whose needed sources are all kept: {rule['answerable_kept']} of "
         f"{rule['answerable']}.",
-        f"- Out-of-scope questions already reaching the answer model at {current:.2f}: "
+        f"- Out-of-scope questions reaching the answer model at the old gate {current:.2f}: "
         f"{rule['already_through']} of {rule['out_of_scope']}.",
         f"- Extra out-of-scope or near-miss questions that would newly reach the answer model at "
         f"{rule['candidate']:.2f}: {len(rule['extra'])}"

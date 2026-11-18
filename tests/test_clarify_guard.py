@@ -235,9 +235,9 @@ def test_p1b_flag_on_still_uses_the_rewrite_with_history():
     assert p.search_query == "rewritten" and p.answer_question == "rewritten"
 
 
-def test_the_flags_default_to_off_for_p1b_and_on_for_the_guard():
+def test_the_flags_default_to_on_for_p1b_and_the_guard():
     s = Settings(_env_file=None)
-    assert s.search_original_when_no_history is False and s.clarify_guard_enabled is True
+    assert s.search_original_when_no_history is True and s.clarify_guard_enabled is True
 
 
 def test_the_preparer_applies_the_guard_and_records_the_override_in_the_usage():

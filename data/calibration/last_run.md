@@ -9,11 +9,11 @@ Embedding model: `voyage-4`. Cosine similarity.
 | A03 answerable | direct | What should I eat after a tooth extraction? | 0.673 | 0.673 | 0.673 0.574 0.560 0.527 0.511 | post-extraction-aftercare.pdf p1 | kept |
 | A04 answerable | paraphrase | How much to clean my teeth? | 0.596 | 0.596 | 0.596 0.594 0.500 0.498 0.491 | services-and-prices.pdf p1 | kept |
 | A05 answerable | two_documents | Are you open on Thanksgiving? | 0.545 | 0.408 | 0.545 0.408 0.389 0.367 0.360 | holiday-closures-2026.txt p- | kept |
-| A06 answerable | terse | opening hours? | 0.517 | 0.517 | 0.517 0.433 0.424 0.396 0.351 | opening-hours.md p- | kept |
+| A06 answerable | terse | opening hours? | 0.517 | 0.424 | 0.517 0.433 0.424 0.396 0.351 | opening-hours.md p- | kept |
 | A07 answerable | terse | saturday hours | 0.465 | 0.465 | 0.465 0.368 0.352 0.328 0.298 | opening-hours.md p- | kept |
 | A08 answerable | terse | wisdom tooth removal cost | 0.616 | 0.616 | 0.616 0.498 0.452 0.452 0.447 | services-and-prices.pdf p2 | kept |
 | A09 answerable | multi_part | How much is a root canal on a molar, and do you offer payment plans? | 0.551 | 0.549 | 0.551 0.549 0.547 0.500 0.481 | services-and-prices.pdf p2 | kept |
-| A10 answerable | typo | What happens if I miss my appointmnet? | 0.561 | 0.561 | 0.561 0.422 0.396 0.389 0.382 | cancellation-policy.pdf p2 | kept |
+| A10 answerable | typo | What happens if I miss my appointmnet? | 0.561 | 0.422 | 0.561 0.422 0.396 0.389 0.382 | cancellation-policy.pdf p2 | kept |
 | A11 answerable | negative_answer | Do you do IV sedation? | 0.527 | 0.527 | 0.527 0.492 0.451 0.426 0.405 | sedation-options.md p- | kept |
 | A12 answerable | paraphrase | Where can I leave my car when I visit? | 0.513 | 0.513 | 0.513 0.434 0.390 0.365 0.287 | location-and-parking.md p- | kept |
 | A13 answerable | direct | At what age should my child first see a dentist? | 0.720 | 0.720 | 0.720 0.633 0.611 0.592 0.544 | childrens-dentistry.md p- | kept |
@@ -40,3 +40,14 @@ Embedding model: `voyage-4`. Cosine similarity.
 - Out-of-scope questions that slip past the gate: 6 of 10 (highest top-1: 0.577, O09).
 - Vague questions that pass the gate: 0 of 2 (Milestone 4's clarify step handles these).
 - Slipping questions reach the answer model, which must say 'not answerable'.
+
+## Gate rule (V3)
+
+- Highest top-1 among practice unrelated and vague questions: 0.466 (O05).
+- Candidate gate = ceiling + 0.03, rounded up to two decimals: **0.50** (the config default stays 0.40 until the owner approves this table).
+- Unrelated and vague questions still refused at the gate: 6 of 6.
+- Practice answerables whose needed sources are all kept: 10 of 16.
+- Out-of-scope questions already reaching the answer model at 0.40: 6 of 10.
+- Extra out-of-scope or near-miss questions that would newly reach the answer model at 0.50: 0.
+
+TRIPWIRE: this table cannot show whether they are ANSWERED (that needs the answer model, V4: run it with the candidate gate). If MORE THAN ONE extra question gets through AND is answered, use 0.35 instead of 0.50.

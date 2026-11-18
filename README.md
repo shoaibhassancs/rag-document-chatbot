@@ -136,9 +136,20 @@ Tests mock Groq and Voyage and never call them. Database tests use a throwaway `
 - The similarity threshold and the answer prompt were tuned on a small calibration set; the real test is the evaluation set (TBD: from the real evaluation).
 - The answer model choice between `gpt-oss-20b` and `gpt-oss-120b` is provisional until the evaluation is run on both.
 - Chunks are smaller than the original target size (a decision recorded in `DECISIONS.md`).
+- An answer that spans two documents can miss the second one when the top-5 search fills slots with near-duplicate chunks from one page.
+- The evaluation judge is an LLM and is somewhat strict or inconsistent about omitted side details. The scores were hand-checked on a sample of the judged answers, which checks the judge, not the chatbot.
 - Scanned PDFs, images and tables inside PDFs are not supported.
 - `/chat` and `/documents` are open: this is a local showcase.
 - Conversation memory stores masked text, so a follow-up cannot refer back to an exact email address or phone number.
+
+## What I would do next
+
+- Add the document title and section heading to each chunk before embedding it.
+- Add diversity to the search (MMR) so one page cannot fill several of the five slots.
+- Add hybrid search: keyword plus vector.
+- Add a reranker over about 15 candidates.
+
+Any of these needs fresh held-out questions to measure; the current question set has already informed earlier changes.
 
 ## Production notes
 

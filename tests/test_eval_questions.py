@@ -156,7 +156,7 @@ def test_the_readme_says_the_questions_are_approved_and_that_no_score_exists():
     text = README.read_text()
     assert text.startswith("# Evaluation")
     assert "approved on Nov 17, 2026" in text and "DRAFT: not approved" not in text
-    assert "No score exists yet" in text
+    assert "eval/results/" in text and "not a held-out estimate" in text
     assert "no number may appear" in text.lower()
     # Changed deliberately (D-080): the basis is now context_chunks (was used_chunks).
     assert "Faithfulness basis" in text and "context_chunks" in text

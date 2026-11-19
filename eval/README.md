@@ -1,8 +1,8 @@
 # Evaluation (Milestone 5): harness and rubric
 
-**The question set was approved on Nov 17, 2026** (all 40 read in a table; mix 29 answerable, 7 out of scope, 4 vague). The harness is built and tested with mocks; it has not run live.
+**The question set was approved on Nov 17, 2026** (all 40 read in a table; mix 29 answerable, 7 out of scope, 4 vague). The harness has been run live: Run A (the baseline), then one fix pass, then runA2 (`gpt-oss-20b`) and runB (`gpt-oss-120b`), each on these 40 questions.
 
-**No score exists yet.** No evaluation has been run. No number may appear in this README, the main README, the case study or a screenshot unless it came from a real run on the approved questions. Anything labelled `DRY RUN: FAKE DATA, NOT A RESULT` is produced by fakes and is never a result.
+**Where the results are.** The results table and its caveats are in the main `README.md`; the per-question summaries and the comparison are in `eval/results/` (`runA-20b-summary.md`, `runA2-20b-summary.md`, `runB-120b-summary.md`, `M5-comparison.md`), and the judge check is in `eval/results/judge-check__judge_correctness_v1__judge_faithfulness_v2.md`. This file holds no result numbers. The fixes after Run A were chosen after seeing Run A on the same 40 questions, so the results are not a held-out estimate. No number may appear in a README, the case study or a screenshot unless it came from a real run on the approved questions. Anything labelled `DRY RUN: FAKE DATA, NOT A RESULT` is produced by fakes and is never a result.
 
 ## What it measures
 

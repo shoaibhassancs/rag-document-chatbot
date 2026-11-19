@@ -155,7 +155,7 @@ def test_the_readme_says_the_questions_are_approved_and_that_no_score_exists():
     # Changed deliberately (INSTRUCTIONS_17): the DRAFT banner became the approval statement.
     text = README.read_text()
     assert text.startswith("# Evaluation")
-    assert "approved by the owner on Nov 17, 2026" in text and "DRAFT: not approved" not in text
+    assert "approved on Nov 17, 2026" in text and "DRAFT: not approved" not in text
     assert "No score exists yet" in text
     assert "no number may appear" in text.lower()
     # Changed deliberately (D-080): the basis is now context_chunks (was used_chunks).

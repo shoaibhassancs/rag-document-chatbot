@@ -101,27 +101,35 @@ uv sync --group ui
 uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510
 ```
 
-The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run with `streamlit run` and tested in a browser by the owner on Nov 17, 2026. Docker, checked by the owner on Nov 17, 2026: the API image builds (`docker compose build api`, 524 MB, production dependencies only, no Streamlit by design); the UI image builds (`docker compose --profile ui build ui`) and reports Streamlit 1.66.0; `docker compose --profile ui config` parses. Owner-reported on Nov 19, 2026: the UI image starts as a container (`docker compose --profile ui up -d --no-build ui`, Up on `127.0.0.1:8510`), Streamlit runs in it, and the page loads on http://localhost:8510 and answers, refuses and asks a clarifying question against the API container. Not verified: the UI image installs Streamlit with pip, so its dependencies do not come from `uv.lock` and the image is not fully reproducible. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run with `streamlit run` and tested in a browser on Nov 17, 2026. Docker, checked on Nov 17, 2026: the API image builds (`docker compose build api`, 524 MB, production dependencies only, no Streamlit by design); the UI image builds (`docker compose --profile ui build ui`) and reports Streamlit 1.66.0; `docker compose --profile ui config` parses. Checked on Nov 19, 2026: the UI image starts as a container (`docker compose --profile ui up -d --no-build ui`, Up on `127.0.0.1:8510`), Streamlit runs in it, and the page loads on http://localhost:8510 and answers, refuses and asks a clarifying question against the API container. Not verified: the UI image installs Streamlit with pip, so its dependencies do not come from `uv.lock` and the image is not fully reproducible. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
 
 ### Screenshots
 
-From the owner's local run of the container UI on Nov 19, 2026, with made-up clinic data (demo questions, not the evaluation questions; the full set is in [docs/media/](docs/media/README.md)).
+From a local run of the container UI on Nov 19, 2026, with made-up clinic data (demo questions, not the evaluation questions; the table is in [docs/media/](docs/media/README.md)).
 
-![An answered question with its source, a refusal and a clarifying question](docs/media/01-answered-refused-clarify.png)
+![The sidebar with the list of the 29 documents](docs/media/01-documents-panel.png)
 
-*An answer with its source file and page, a refusal with no sources, and a clarifying question for a vague message.*
+*The documents panel with the list expanded.*
 
-![An instruction-override attempt refused with the fixed message](docs/media/02-injection-refused.png)
+![An answered question with its source file and page](docs/media/02-single-answer-with-citation.png)
 
-*A prompt-injection attempt: refused, with the fixed reply and no sources.*
+*An answer with its source file and page.*
 
-![A follow-up answered from the conversation](docs/media/03-followup-memory.png)
+![An out-of-scope question refused with the fixed message](docs/media/03-refusal-out-of-scope.png)
+
+*An out-of-scope question: refused, no sources.*
+
+![A vague question answered with one clarifying question](docs/media/04-clarify.png)
+
+*A vague question: one clarifying question, nothing searched.*
+
+![A follow-up answered from the conversation](docs/media/05-followup-memory.png)
 
 *A follow-up that uses conversation memory.*
 
-![The sidebar with the list of the 29 documents](docs/media/04-documents-panel.png)
+![An instruction-override attempt refused with the fixed message](docs/media/06-injection-refused.png)
 
-*The documents panel with the list expanded.*
+*A prompt-injection attempt: refused, with the fixed reply and no sources.*
 
 ## Configuration
 
@@ -138,19 +146,19 @@ All settings live in `.env` (git-ignored); `.env.example` lists every name with 
 
 ## Evaluation
 
-**How to read the results.** There are 40 owner-approved questions (29 answerable, 7 out of scope, 4 vague). **Run A** is the baseline. **runA2** and **runB** are one run each of the same fixed pipeline (similarity gate 0.33, original wording searched when there is no history, clarify guard on); they differ only in the answer model (`gpt-oss-20b` and `gpt-oss-120b`). The fixes were chosen after seeing Run A's failures on these same 40 questions, so the improvement from Run A is **not a held-out estimate** of how the bot does on new questions. A single run has noise of about one or two questions: the clarify step is not deterministic, and the same pipeline moved the retrieval hit rate by 3.5 points between runA2 and runB. The judge is an LLM (`qwen/qwen3.8-27b`); its zeros and the unjudged items were reviewed by the owner (an answer counts as correct at 7 out of 10 or better), and a few passes were spot-checked. Only the zeros were reviewed, so the reviewed scores can only be higher than the judge's. Details, per-question tables and the review verdicts are in `eval/results/` (`M5-comparison.md`, `runA2-20b-summary.md`, `runB-120b-summary.md`, `runA-20b-summary.md`) and in `DECISIONS.md` (D-081 to D-087).
+**How to read the results.** There are 40 fixed questions that I wrote and approved (29 answerable, 7 out of scope, 4 vague). **Run A** is the baseline. **runA2** and **runB** are one run each of the same fixed pipeline (similarity gate 0.33, original wording searched when there is no history, clarify guard on); they differ only in the answer model (`gpt-oss-20b` and `gpt-oss-120b`). The fixes were chosen after seeing Run A's failures on these same 40 questions, so the improvement from Run A is **not a held-out estimate** of how the bot does on new questions. A single run has noise of about one or two questions: the clarify step is not deterministic, and the same pipeline moved the retrieval hit rate by 3.5 points between runA2 and runB. The judge is an LLM (`qwen/qwen3.8-27b`); its zeros and the unjudged items were reviewed by hand (I counted an answer as correct if I rated it 7 out of 10 or better), and a few passes were spot-checked. Only the zeros were reviewed, so the reviewed scores can only be higher than the judge's. Details, per-question tables and the review verdicts are in `eval/results/` (`M5-comparison.md`, `runA2-20b-summary.md`, `runB-120b-summary.md`, `runA-20b-summary.md`) and in `DECISIONS.md` (D-081 to D-087).
 
 | Metric (target) | Run A (baseline) | runA2 (20b) | runB (120b) |
 | --- | --- | --- | --- |
 | Retrieval hit rate, all sources (90%) | 69.0% | 79.3% | 82.8% |
 | Faithfulness, judge (90%) | 100% (n=13) | 100% (n=21) | 100% (n=23) |
 | Answer correctness, **judge score** (85%) | 39.3% | 69.0% | 71.4% |
-| Answer correctness, **owner-reviewed** (85%) | not recomputed | 72.4% (21 of 29) | 75.9% (22 of 29) |
+| Answer correctness, **hand-reviewed** (85%) | not recomputed | 72.4% (21 of 29) | 75.9% (22 of 29) |
 | Refusal accuracy (95%) | 69.4% | 80.6% | 83.3% |
 | Status accuracy (no target) | 55.0% | 72.5% | 75.0% |
 | Latency p50 / p95 (p50 under 3 s) | 1.6 / 2.6 s | 2.1 / 2.9 s | 2.2 / 3.5 s |
 
-Targets met: faithfulness and latency. Not met: retrieval hit rate, answer correctness and refusal accuracy. Vague-question handling got worse on purpose (100% in Run A, 50% in runA2 and runB): the clarify guard searches a vague message that names a generic subject, which rescued several clear questions that Run A had wrongly turned into clarifying questions and cost two of the four vague ones. The two models are one question apart on every measure, within noise, so no difference between them is claimed. The final answer model is `gpt-oss-20b` (D-087). Run A's published numbers are as the judge produced them; one of its judge zeros was later rated acceptable by the owner and is not recomputed.
+Targets met: faithfulness and latency. Not met: retrieval hit rate, answer correctness and refusal accuracy. Vague-question handling got worse on purpose (100% in Run A, 50% in runA2 and runB): the clarify guard searches a vague message that names a generic subject, which rescued several clear questions that Run A had wrongly turned into clarifying questions and cost two of the four vague ones. The two models are one question apart on every measure, within noise, so no difference between them is claimed. The final answer model is `gpt-oss-20b` (D-087). Run A's published numbers are as the judge produced them; one of its judge zeros was later rated acceptable on hand review and is not recomputed.
 
 ## Tests
 

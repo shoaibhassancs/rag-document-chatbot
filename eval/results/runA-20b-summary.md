@@ -1,6 +1,6 @@
 # Baseline (Run A): per-question summary
 
-Derived from `eval/results/openai_gpt-oss-20b__answer_v2__clarify_v2__runA-20b.jsonl` (git-ignored raw record). No answers or question text here: only ids and statuses. Run A: answer model gpt-oss-20b (answer_v2), clarify gpt-oss-120b (clarify_v2), gate 0.40, top_k 5, judge qwen/qwen3.8-27b. This is the BASELINE before the INSTRUCTIONS_27 fix pass; the owner had not yet hand-checked the judge verdicts. The summary table of metrics is in `openai_gpt-oss-20b__answer_v2__clarify_v2__runA-20b.md`.
+Derived from `eval/results/openai_gpt-oss-20b__answer_v2__clarify_v2__runA-20b.jsonl` (git-ignored raw record). No answers or question text here: only ids and statuses. Run A: answer model gpt-oss-20b (answer_v2), clarify gpt-oss-120b (clarify_v2), gate 0.40, top_k 5, judge qwen/qwen3.8-27b. This is the BASELINE before the INSTRUCTIONS_27 fix pass; the judge verdicts had not yet been hand-checked. The summary table of metrics is in `openai_gpt-oss-20b__answer_v2__clarify_v2__runA-20b.md`.
 
 | qid | category | expected status | got status | clarify action | top-1 similarity |
 | --- | --- | --- | --- | --- | --- |

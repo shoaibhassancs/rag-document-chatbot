@@ -1,6 +1,6 @@
 # Demo script (draft): 2 to 3 minute video
 
-**Status: DRAFT written Nov 17, 2026, before the evaluation has run.** Every evaluation number in it is TBD and stays TBD until the owner and Claude fill it from the real runs. **The demo questions below were chosen to show features. They are not the evaluation questions and say nothing about how well the bot performs; the evaluation is a separate set of 40 questions with its own numbers.**
+**Status: DRAFT written Nov 17, 2026, before the evaluation has run.** Every evaluation number in it is TBD and stays TBD until it is filled from the real runs. **The demo questions below were chosen to show features. They are not the evaluation questions and say nothing about how well the bot performs; the evaluation is a separate set of 40 questions with its own numbers.**
 
 Pace: no more than 2 questions a minute (Voyage's free plan allows 3 requests a minute, and each question also makes two model calls). Wait for each reply before typing the next one. If a reply says "busy", wait a minute and ask again; cut that from the video.
 

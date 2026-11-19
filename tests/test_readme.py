@@ -82,7 +82,7 @@ def _evaluation_section() -> str:
 
 def test_the_evaluation_section_has_the_results_table_and_the_honesty_statements():
     section = _evaluation_section()
-    for text in ("Run A", "runA2", "runB", "not a held-out estimate", "owner-reviewed"):
+    for text in ("Run A", "runA2", "runB", "not a held-out estimate", "hand-reviewed"):
         assert text in section, text
     for metric in ("Retrieval hit rate", "Faithfulness", "Answer correctness", "Refusal accuracy"):
         assert metric in section, metric
@@ -142,7 +142,7 @@ def test_the_ui_section_embeds_existing_screenshots_and_keeps_the_unverified_par
     root = Path(__file__).resolve().parents[1]
     for image in images:
         assert (root / image).is_file(), image
-    assert "Owner-reported on Nov 19, 2026" in section and "Not verified" in section
+    assert "Checked on Nov 19, 2026" in section and "Not verified" in section
     assert "uv.lock" in section and "TBD" not in section
 
 

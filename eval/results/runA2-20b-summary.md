@@ -1,6 +1,6 @@
 # runA2-20b: per-question summary
 
-Derived from `eval/results/openai_gpt-oss-20b__answer_v2__clarify_v2__runA2-20b.jsonl` (git-ignored raw record). After the one fix pass (D-081 to D-083): gate 0.33, P1a, P1b, clarify guard (P2). No answers or question text here: only ids, statuses and numbers. Answer model gpt-oss-20b (answer_v2), clarify gpt-oss-120b (clarify_v2), judge qwen/qwen3.8-27b (judge_correctness_v1, judge_faithfulness_v2), top_k 5, one run. Judge scores are as the judge produced them (after the D-085 re-judging); the owner's review is in `M5-comparison.md`.
+Derived from `eval/results/openai_gpt-oss-20b__answer_v2__clarify_v2__runA2-20b.jsonl` (git-ignored raw record). After the one fix pass (D-081 to D-083): gate 0.33, P1a, P1b, clarify guard (P2). No answers or question text here: only ids, statuses and numbers. Answer model gpt-oss-20b (answer_v2), clarify gpt-oss-120b (clarify_v2), judge qwen/qwen3.8-27b (judge_correctness_v1, judge_faithfulness_v2), top_k 5, one run. Judge scores are as the judge produced them (after the D-085 re-judging); the hand review is in `M5-comparison.md`.
 
 ## Metrics as printed by the run
 

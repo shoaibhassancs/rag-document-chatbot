@@ -1,7 +1,5 @@
 # RAG Document Chatbot (BrightSmile Dental demo)
 
-STATUS: everything is done.
-
 ## What this is
 
 A question-answering chatbot that answers only from a clinic's own documents, cites its sources, refuses what the documents do not cover and asks one short question when a request is too vague. The demo client is a fictional dental clinic, BrightSmile Dental, and all data is fictional. Portfolio project 1 of 6; its `/chat` API is reused by later projects.

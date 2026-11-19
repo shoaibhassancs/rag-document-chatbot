@@ -131,7 +131,9 @@ def test_the_required_headings_exist_and_production_notes_is_empty():
         assert f"\n## {heading}\n" in README, heading
     notes = README.split("\n## Production notes\n")[1].split("\n## Data")[0]
     assert "TBD" not in notes and "X-API-Key" in notes and "held-out" in notes
-    assert "STATUS" in README.splitlines()[2]
+    lines = README.splitlines()
+    assert not any(line.startswith("STATUS") for line in lines)
+    assert [line for line in lines if line.strip()][1] == "## What this is"
 
 
 def test_the_ui_section_embeds_existing_screenshots_and_keeps_the_unverified_parts():

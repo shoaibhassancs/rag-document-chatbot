@@ -301,13 +301,14 @@ Milestone 7 makes the project showable: a redrawn architecture diagram, final sc
 | Decision | Why |
 | --- | --- |
 | Silent video, no captions | The README, screenshots and case study carry the explanation |
-| Small mp4 in the repo, original .mov local | GitHub plays mp4 and the repo stays small |
+| Small mp4 in the repo, original .mov local | The repo stays small; on GitHub the video downloads instead of playing inline (checked Nov 19, 2026) |
 
 ### What was verified
 - 791 tests pass, ruff clean.
 - Owner-reported (Nov 19, 2026): the README renders on GitHub (diagram, Mermaid, six screenshots). The video was recorded in the container UI and its frames were checked for tabs, keys and personal data.
 
 ### What to watch out for
-- Not verified: whether the video plays inline on GitHub (a direct link is the fallback); the UI image's dependencies come from pip, not `uv.lock`.
+- On GitHub the demo video downloads instead of playing inline (checked Nov 19, 2026); the direct link in the README works that way.
+- Not verified: the UI image's dependencies come from pip, not `uv.lock`.
 - The results are not a held-out estimate, and the retrieval, correctness and refusal targets are not met.
 - Open small items: `/health` does not report a failed clarify step; two judge calls still fail with `reply_cut_off`; there is no held-out question set.

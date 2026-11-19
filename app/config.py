@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     judge_llm_model: str = "qwen/qwen3.8-27b"
     judge_llm_api_key_var: str = "GROQ_API_KEY"
     judge_llm_reasoning_effort: str | None = "low"
-    judge_llm_max_output_tokens: int = 400
+    judge_llm_max_output_tokens: int = 800  # reasoning can eat a small budget (D-085)
 
     # --- Rewrite / clarify role (small model) ---
     rewrite_llm_provider: str = "groq"

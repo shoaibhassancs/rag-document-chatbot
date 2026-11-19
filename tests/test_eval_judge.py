@@ -7,6 +7,7 @@ from app.config import Settings
 from app.generation.answer import AnswerFormatError
 from app.generation.llm import LLMClient, LLMConfigError
 from eval.judge import (
+    JUDGE_MAX_WAIT_SECONDS,
     Judge,
     JudgeError,
     build_chunks_block,
@@ -16,6 +17,7 @@ from eval.judge import (
     build_judge,
     parse_score,
     parse_verdict,
+    salvage_verdict,
 )
 from tests.test_llm_client import Server, ok_body, resp, role
 
@@ -113,7 +115,7 @@ def test_one_bad_reply_is_retried_once_and_then_works():
 
 def test_two_bad_replies_become_a_judge_error_never_a_score():
     judge, server = judge_with(resp(body=ok_body("nope")), resp(body=ok_body('{"correct": 7}')))
-    with pytest.raises(JudgeError, match="unusable judge reply twice"):
+    with pytest.raises(JudgeError, match="invalid_score"):
         judge.correctness("q", "e", "a")
     assert len(server.requests) == 2
 
@@ -186,3 +188,141 @@ def test_build_judge_without_a_key_names_the_role_not_a_value():
     with pytest.raises(LLMConfigError) as info:
         build_judge(Settings(_env_file=None, groq_api_key=None))
     assert "judge" in str(info.value)
+
+
+# ----------------------------------------------------------------------------- D-085: reliability
+
+
+def jgf(failed_generation=None):
+    error = {"message": "Failed to generate JSON.", "code": "json_validate_failed"}
+    if failed_generation is not None:
+        error["failed_generation"] = failed_generation
+    return resp(400, {"error": error})
+
+
+def test_a_json_failure_whose_body_holds_a_valid_verdict_is_accepted_without_more_calls():
+    raw = 'thinking... {"correct": 1, "reason": "matches the expected figure"} trailing words'
+    judge, server = judge_with(jgf(raw), jgf(raw))
+    verdict = judge.correctness("q", "e", "a")
+    assert (verdict.score, verdict.reason) == (1, "matches the expected figure")
+    assert len(server.requests) == 2  # the client's own single JSON retry, then the salvage
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"correct": 2, "reason": "x"}',
+        '{"correct": 1}',
+        '{"correct": 1, "reason": "  "}',
+        '{"correct": "1", "reason": "x"}',
+        "I think it is correct but I will not say it in JSON",
+        "{broken json",
+        None,
+    ],
+)
+def test_a_json_failure_with_unusable_text_stays_an_error(raw):
+    judge, server = judge_with(jgf(raw), jgf(raw), resp(body=ok_body("still prose")))
+    with pytest.raises(JudgeError, match="json_generation_failed|invalid_json"):
+        judge.correctness("q", "e", "a")
+    assert "response_format" not in json.loads(server.requests[2].content)
+
+
+def test_after_a_json_failure_one_attempt_without_json_mode_is_validated_the_same_way():
+    judge, server = judge_with(jgf(), jgf(), reply(correct=0, reason="wrong price"))
+    verdict = judge.correctness("q", "e", "a")
+    assert (verdict.score, verdict.reason) == (0, "wrong price")
+    bodies = [json.loads(r.content) for r in server.requests]
+    assert "response_format" in bodies[0] and "response_format" not in bodies[2]
+    assert bodies[0]["messages"] == bodies[2]["messages"]  # same prompt text
+
+
+def test_the_attempt_without_json_mode_rejects_an_out_of_range_score():
+    judge, _ = judge_with(jgf(), jgf(), reply(correct=2, reason="x"))
+    with pytest.raises(JudgeError, match="invalid_score"):
+        judge.correctness("q", "e", "a")
+
+
+def test_salvage_takes_the_first_object_and_requires_both_scores_for_a_combined_call():
+    raw = '{"correct": 1, "faithful": 0, "reason": "r"} {"correct": 0}'
+    assert salvage_verdict(raw, ("correct", "faithful")) == ({"correct": 1, "faithful": 0}, "r")
+    assert salvage_verdict('{"correct": 1, "reason": "r"}', ("correct", "faithful")) is None
+
+
+def rate_limited_judge(*replies):
+    server = Server(*replies)
+    waits: list[float] = []
+    llm = LLMClient(
+        role(name="judge", model="judge-model"),
+        max_retries=6,
+        max_wait_seconds=JUDGE_MAX_WAIT_SECONDS,
+        transport=httpx.MockTransport(server),
+        sleep=waits.append,
+    )
+    return Judge(llm, "C", "F", "B", {}), server, waits
+
+
+def test_the_judge_honours_retry_after_up_to_ninety_seconds_and_retries():
+    slow = resp(429, {"error": {"message": "rate"}}, {"retry-after": "75"})
+    judge, server, waits = rate_limited_judge(slow, slow, reply(correct=1, reason="ok"))
+    assert judge.correctness("q", "e", "a").score == 1
+    assert waits == [75.0, 75.0] and len(server.requests) == 3
+
+
+def test_six_rate_limit_retries_then_a_precise_error_never_a_score():
+    limited = resp(429, {"error": {"message": "rate"}}, {"retry-after": "5"})
+    judge, server, waits = rate_limited_judge(*[limited] * 7)
+    with pytest.raises(JudgeError) as info:
+        judge.correctness("q", "e", "a")
+    assert str(info.value) == "rate_limited"
+    assert len(server.requests) == 7 and len(waits) == 6
+
+
+def test_a_retry_after_above_the_cap_is_not_waited_for():
+    judge, server, waits = rate_limited_judge(
+        resp(429, {"error": {"message": "daily"}}, {"retry-after": "600"})
+    )
+    with pytest.raises(JudgeError, match="rate_limited"):
+        judge.correctness("q", "e", "a")
+    assert waits == [] and len(server.requests) == 1
+
+
+def test_build_judge_uses_the_judge_only_429_settings_and_the_chat_defaults_are_unchanged():
+    judge = build_judge(Settings(_env_file=None, groq_api_key="fake-groq-key"))
+    assert (judge._llm._max_retries, judge._llm._max_wait) == (6, 90.0)
+    assert Settings(_env_file=None).judge_llm_max_output_tokens == 800
+    chat = LLMClient(role())
+    assert (chat._max_retries, chat._max_wait) == (3, 20.0)
+
+
+def test_error_reasons_are_precise_and_hold_no_secret_or_prompt():
+    judge, _ = judge_with(resp(400, {"error": {"message": "bad SECRET QUESTION", "code": "x"}}))
+    with pytest.raises(JudgeError) as info:
+        judge.correctness("SECRET QUESTION", "e", "a")
+    assert str(info.value) == "bad_request"
+    unfaithful, _ = judge_with(reply(faithful=5, reason="x"), reply(faithful=5, reason="x"))
+    with pytest.raises(JudgeError) as info2:
+        unfaithful.faithfulness("a", ["c"])
+    assert str(info2.value) == "invalid_score"
+
+
+def test_a_cut_off_reply_is_reported_as_such():
+    cut = ok_body('{"correct": 1')
+    cut["choices"][0]["finish_reason"] = "length"
+    judge, _ = judge_with(resp(body=cut), resp(body=cut))
+    with pytest.raises(JudgeError, match="reply_cut_off"):
+        judge.correctness("q", "e", "a")
+
+
+def test_the_log_output_of_a_failing_judge_call_has_no_key_or_prompt(caplog):
+    caplog.set_level("DEBUG")
+    judge, _ = judge_with(jgf("{}"), jgf("{}"), resp(body=ok_body("prose")))
+    with pytest.raises(JudgeError):
+        judge.correctness("SECRET QUESTION", "e", "a")
+    assert "fake-test-secret-value" not in caplog.text and "SECRET QUESTION" not in caplog.text
+
+
+def test_a_judge_error_is_never_counted_as_a_pass_in_the_check_summary():
+    from scripts.check_judge import outcome
+
+    assert outcome(1, {"score": None, "reason": "", "error": "json_generation_failed"}) == "ERROR"
+    assert outcome(0, {"score": None, "reason": "", "error": "rate_limited"}) == "ERROR"

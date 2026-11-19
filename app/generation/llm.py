@@ -32,7 +32,16 @@ DEFAULT_429_DELAYS = (2.0, 5.0, 10.0)  # only used if a 429 carries no Retry-Aft
 
 
 class LLMError(Exception):
-    """Base class for LLM failures."""
+    """Base class for LLM failures. `reason` is a short machine-readable cause (for example
+    `rate_limited`, `json_generation_failed`); `failed_generation` is the raw text Groq puts in a
+    JSON-failure error body, if any. Neither ever contains the key or the prompt."""
+
+    def __init__(
+        self, message: str = "", *, reason: str | None = None, failed_generation: str | None = None
+    ):
+        super().__init__(message)
+        self.reason = reason
+        self.failed_generation = failed_generation
 
 
 class LLMBusyError(LLMError):
@@ -53,6 +62,10 @@ class _QuotaExhausted(Exception):
 
 class _JSONGenerationFailed(Exception):
     """Internal: the model could not produce valid JSON (HTTP 400). Retry once, then fall back."""
+
+    def __init__(self, message: str, failed_generation: str | None = None):
+        super().__init__(message)
+        self.failed_generation = failed_generation
 
 
 @dataclass
@@ -120,8 +133,12 @@ class LLMClient:
                     )
                     continue
                 if isinstance(exc, _JSONGenerationFailed):
-                    raise LLMRequestError(str(exc)) from None
-                raise LLMBusyError(str(exc)) from None
+                    raise LLMRequestError(
+                        str(exc),
+                        reason="json_generation_failed",
+                        failed_generation=exc.failed_generation,
+                    ) from None
+                raise LLMBusyError(str(exc), reason="rate_limited") from None
             result.latency_ms = round((time.perf_counter() - started) * 1000)
             return result
         raise LLMBusyError("No model available.")  # unreachable: the loop returns or raises
@@ -153,7 +170,9 @@ class LLMClient:
                 response = self._client.post(self._url, json=body, headers=headers)
             except httpx.HTTPError as exc:
                 if server_tries >= len(SERVER_RETRY_DELAYS):
-                    raise LLMBusyError(f"LLM unreachable ({type(exc).__name__}).") from None
+                    raise LLMBusyError(
+                        f"LLM unreachable ({type(exc).__name__}).", reason="unreachable"
+                    ) from None
                 self._wait("network error", SERVER_RETRY_DELAYS[server_tries])
                 server_tries += 1
                 continue
@@ -178,19 +197,26 @@ class LLMClient:
                 )
             if 500 <= status < 600:
                 if server_tries >= len(SERVER_RETRY_DELAYS):
-                    raise LLMBusyError(f"LLM service returned HTTP {status} after retries.")
+                    raise LLMBusyError(
+                        f"LLM service returned HTTP {status} after retries.",
+                        reason="service_unavailable",
+                    )
                 self._wait(f"HTTP {status}", SERVER_RETRY_DELAYS[server_tries])
                 server_tries += 1
                 continue
             if status == 400 and json_mode and _is_json_failure(response):
                 if fell_back or json_retried:
                     raise _JSONGenerationFailed(
-                        f"The model could not produce valid JSON: {_detail(response)}"
+                        f"The model could not produce valid JSON: {_detail(response)}",
+                        _failed_generation(response),
                     )
                 log.warning("llm_retry role=%s reason=json_generation_failed", self.role.name)
                 json_retried = True
                 continue
-            raise LLMRequestError(f"LLM rejected the request: HTTP {status}: {_detail(response)}")
+            raise LLMRequestError(
+                f"LLM rejected the request: HTTP {status}: {_detail(response)}",
+                reason="bad_request",
+            )
 
     def _wait(self, reason: str, seconds: float) -> None:
         log.warning("llm_retry role=%s reason=%s wait=%.1fs", self.role.name, reason, seconds)
@@ -266,6 +292,15 @@ def _is_json_failure(response: httpx.Response) -> bool:
         error.get("code") == "json_validate_failed"
         or "failed to generate json" in str(error.get("message", "")).lower()
     )
+
+
+def _failed_generation(response: httpx.Response) -> str | None:
+    """The model's raw text from a Groq JSON-failure error body (`error.failed_generation`)."""
+    try:
+        value = response.json().get("error", {}).get("failed_generation")
+    except (ValueError, AttributeError):
+        return None
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _detail(response: httpx.Response) -> str:

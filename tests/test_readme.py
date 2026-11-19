@@ -133,6 +133,24 @@ def test_the_required_headings_exist_and_production_notes_is_empty():
     assert "STATUS" in README.splitlines()[2]
 
 
-def test_the_ui_section_does_not_claim_the_ui_has_been_run():
+def test_the_ui_section_embeds_existing_screenshots_and_keeps_the_unverified_parts():
+    from pathlib import Path
+
     section = README.split("## The UI")[1].split("## Configuration")[0]
-    assert "TBD" in section and "screenshots" in section
+    images = re.findall(r"!\[[^\]]*\]\((docs/media/[^)]+)\)", section)
+    assert images
+    root = Path(__file__).resolve().parents[1]
+    for image in images:
+        assert (root / image).is_file(), image
+    assert "Owner-reported on Nov 19, 2026" in section and "Not verified" in section
+    assert "uv.lock" in section and "TBD" not in section
+
+
+def test_the_readme_embeds_the_architecture_picture_and_it_exists():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    section = README.split("## Architecture")[1].split("## Quick start")[0]
+    assert "![" in section and "(docs/architecture.png)" in section
+    assert (root / "docs" / "architecture.png").is_file()
+    assert "updated in Milestone 7" not in README

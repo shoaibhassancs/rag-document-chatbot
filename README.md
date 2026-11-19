@@ -12,35 +12,40 @@ TBD: filled in Milestone 7 with the exact demo questions, in order. The planned 
 
 ## Architecture
 
-Text version of the data flow as built (the PNG in `docs/architecture.png` is updated in Milestone 7):
+![Architecture: ingestion (documents to pgvector) and the query path from the Streamlit UI through FastAPI /chat, the clarify or rewrite call, the clarify guard, Voyage embedding, top 5 search, the 0.33 gate, the grounded answer call and the citations, ending in the statuses clarify, refused and answered](docs/architecture.png)
+
+*How a document is stored and how a question is answered. The source of the picture is `docs/architecture.svg`.*
+
+The picture and the text version below describe the same flow as built after the fix pass.
 
 ```mermaid
 flowchart LR
     subgraph Ingestion
-        D[Documents: PDF, MD, TXT, one web URL] --> L[Load and clean]
+        D[Documents: PDF, MD, TXT, one web page] --> L[Load and clean]
         L --> H{Same content hash?}
         H -- yes --> S[Skip]
         H -- no --> C[Chunk with metadata]
-        C --> E[Embed: Voyage, input_type document]
+        C --> E[Embed: Voyage voyage-4, document]
         E --> V[(Postgres + pgvector)]
     end
     subgraph Query
-        Q[User question] --> A[FastAPI /chat]
-        A --> M[(Session memory)]
-        A --> R[One small-model call: clarify or standalone query]
-        R -- vague --> CL[status clarify]
-        R -- search --> QE[Embed query, cached]
-        QE --> T[Top 5 chunks and similarity threshold]
-        V --> T
-        T -- none pass --> RF[status refused, no LLM call]
-        T --> G[Grounded answer call]
+        UI[Streamlit UI] -- HTTP --> A[FastAPI /chat]
+        A -.-> SIDE[Alongside each question: session memory, recent turns forgotten after a day; chat_logs with personal data masked; failure: status error, HTTP 503]
+        A --> R[Clarify or rewrite: gpt-oss-120b, clarify_v2]
+        R --> N{Needs a clarifying question?}
+        N -- yes --> GU[Clarify guard: if the question only repeats words already given, search instead]
+        GU -- guard agrees --> CL[status clarify]
+        GU -- guard overrides --> QE
+        N -- no, search --> QE[Embed query: Voyage, original wording when there is no history]
+        QE --> T[Top 5 chunks: cosine search in pgvector]
+        V -. reads stored chunks .-> T
+        T --> GA{Any chunk with similarity at least 0.33?}
+        GA -- no --> RF[status refused, no model call]
+        GA -- yes --> G[Grounded answer: gpt-oss-20b, answer_v2, JSON, uses chunks at or above 0.33]
         G -- not answerable --> RF
-        G --> CI[Citations built from chunk metadata]
+        G --> CI[Citations from chunk metadata: file and page, built in code]
         CI --> OUT[status answered]
-        A -. model or service failure .-> ERR[status error, HTTP 503]
-        A --> LOG[(chat_logs, masked)]
     end
-    UI[Streamlit UI] -- HTTP --> A
 ```
 
 ## Quick start
@@ -96,7 +101,27 @@ uv sync --group ui
 uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510
 ```
 
-The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run with `streamlit run` and tested in a browser by the owner on Nov 17, 2026. TBD: screenshots. Docker, checked by the owner on Nov 17, 2026: the API image builds (`docker compose build api`, 524 MB, production dependencies only, no Streamlit by design); the UI image builds (`docker compose --profile ui build ui`) and reports Streamlit 1.66.0; `docker compose --profile ui config` parses. Not verified: the UI image has never been started as a container (the `ui` profile has not been run with `up`), and it installs Streamlit with pip, so its dependencies do not come from `uv.lock` and the image is not fully reproducible. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as locked in `uv.lock`) and was run with `streamlit run` and tested in a browser by the owner on Nov 17, 2026. Docker, checked by the owner on Nov 17, 2026: the API image builds (`docker compose build api`, 524 MB, production dependencies only, no Streamlit by design); the UI image builds (`docker compose --profile ui build ui`) and reports Streamlit 1.66.0; `docker compose --profile ui config` parses. Owner-reported on Nov 19, 2026: the UI image starts as a container (`docker compose --profile ui up -d --no-build ui`, Up on `127.0.0.1:8510`), Streamlit runs in it, and the page loads on http://localhost:8510 and answers, refuses and asks a clarifying question against the API container. Not verified: the UI image installs Streamlit with pip, so its dependencies do not come from `uv.lock` and the image is not fully reproducible. The page is a client of the API above and contains no RAG logic. It shows an answered, refused, clarify or error badge, the sources under each answer, and a documents panel.
+
+### Screenshots
+
+From the owner's local run of the container UI on Nov 19, 2026, with made-up clinic data (demo questions, not the evaluation questions; the full set is in [docs/media/](docs/media/README.md)).
+
+![An answered question with its source, a refusal and a clarifying question](docs/media/01-answered-refused-clarify.png)
+
+*An answer with its source file and page, a refusal with no sources, and a clarifying question for a vague message.*
+
+![An instruction-override attempt refused with the fixed message](docs/media/02-injection-refused.png)
+
+*A prompt-injection attempt: refused, with the fixed reply and no sources.*
+
+![A follow-up answered from the conversation](docs/media/03-followup-memory.png)
+
+*A follow-up that uses conversation memory.*
+
+![The sidebar with the list of the 29 documents](docs/media/04-documents-panel.png)
+
+*The documents panel with the list expanded.*
 
 ## Configuration
 

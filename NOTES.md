@@ -207,6 +207,82 @@ Milestone 4 makes the chatbot behave in conversation. It remembers the last few 
 
 ## Milestone 5: Evaluation
 
+### What this milestone does
+Milestone 5 measures the chatbot. It adds 40 owner-approved questions with expected answers (29 answerable, 7 out of scope, 4 vague), a throttled, resumable evaluation runner, an LLM judge, a clarify-step check and a threshold calibration tool. It produced a baseline (Run A), one general fix pass, and two re-runs: runA2 (answer model gpt-oss-20b) and runB (gpt-oss-120b). The answer model was chosen from them: gpt-oss-20b is final.
+
+### How it works
+- **Runner.** `eval/run_eval.py` asks the real chat service each question, saves progress after every unit, and stops rather than mix two models. It records the answer model, prompt versions, gate and question-file hash in every result file.
+- **Scoring.** Code scores retrieval hit rate (all or any expected source in the top 5), refusal accuracy, status accuracy and latency. The judge (`qwen/qwen3.8-27b`, a different family from the answerer) scores correctness against the expected answer and faithfulness against the retrieved chunks, 0 or 1 each. A failed judge call is an error, never a score.
+- **Fix pass (D-081 to D-083).** After Run A: the answer model receives the user's original words when there is no history; the original words are searched when there is no history; a guard turns a clarifying question that only asks about words already in the message into a search; the gate went from 0.40 to 0.33 (chosen by hand, thin margin). Each was checked on practice data first.
+- **Judge reliability (D-085).** JSON failures are read from the error body or retried without JSON mode; 429s honour Retry-After; error reasons are precise. Prompts and the 0/1 rule did not change.
+
+### Results (judge scores; one run each; 40 questions)
+| Metric (target) | Run A | runA2 (20b) | runB (120b) |
+| --- | --- | --- | --- |
+| Retrieval hit, all sources (90%) | 69.0% | 79.3% | 82.8% |
+| Faithfulness (90%) | 100% | 100% | 100% |
+| Correctness, judge (85%) | 39.3% | 69.0% | 71.4% |
+| Correctness, owner-reviewed (85%) | not recomputed | 72.4% | 75.9% |
+| Refusal accuracy (95%) | 69.4% | 80.6% | 83.3% |
+| Status accuracy | 55.0% | 72.5% | 75.0% |
+| Latency p50 / p95 | 1.6 / 2.6 s | 2.1 / 2.9 s | 2.2 / 3.5 s |
+
+Met: faithfulness, latency. Not met: retrieval hit rate, correctness, refusal accuracy. Vague handling went from 100% to 50% on purpose (the guard).
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| Final answer model gpt-oss-20b (D-087), 120b is fallback | Equal within noise, lower p95 latency, quota split across two models |
+| One fix pass only, then stop | More tuning on the same 40 questions would make the numbers meaningless |
+| Gate 0.33 | Ceiling of truly unrelated and vague practice questions (0.300) plus 0.03; margin is thin and the case for lowering it comes partly from Run A |
+| Keep the clarify guard although it costs vague questions | It rescues clear questions Run A wrongly clarified; the owner accepted the cost knowingly |
+| Judge prompts not changed after seeing results | Changing the judge after seeing answers would be tuning |
+
+### AI and engineering concepts involved
+Retrieval hit rate, faithfulness versus correctness, LLM-as-judge and its failure modes, negative controls for a judge, similarity-threshold gating, non-determinism and run-to-run noise, held-out versus tuned-on data, rate-limit handling.
+
+### What was verified
+- The owner ran Run A, runA2 and runB; the numbers above are owner-reported.
+- The owner hand-checked the judge: 10 of Run A's judged verdicts on Nov 18 (9 agreed), and on Nov 19 every judge 0, the unjudged items and three passes. One judge 0 (E31) was overturned in both runs, others upheld. Corrections can only raise scores.
+- Judge controls (`scripts/check_judge.py`, 12 hand-written controls from the sample documents): owner-run on Nov 18 and again on Nov 19 after the D-085 change; both times 9 of 9 wrong or unsupported controls were scored 0 and 7 of 7 good controls were kept, with no miss. This shows the judge is not a rubber stamp; the controls are clear-cut, so it does not prove the judge catches subtle errors.
+- 787 tests pass with Groq and Voyage mocked.
+
+### What to watch out for
+- **Not a held-out estimate.** The fixes were chosen after seeing Run A on the same 40 questions.
+- Single runs have noise of about one or two questions; the two models cannot be separated.
+- Failures by cause. Design: E04 and E17 retrieval misses; E37 and E39 searched instead of clarified. Clarify model plus design: E08 and E26. Weak-model limit: E21 and E27 (20b) and E16 (120b) refused with the answer in context. E30 got a clarify instead of a refusal.
+- The judge is an LLM; it is strict about omitted side details and two calls kept failing with `reply_cut_off`.
+- Two judge verdicts were filled in by hand (runA2 E20 faithfulness, runB E21 correctness).
+
 ## Milestone 6: UI and packaging
+
+### What this milestone does
+Milestone 6 adds a Streamlit chat page, the fuller test suite and the README, and checks the packaging. The UI is a client of the `/chat` and document APIs; it holds no RAG logic.
+
+### How it works
+- **Page.** `ui/streamlit_app.py` shows the three outcomes (answered, refused, clarify) and error with different badges, sources under each answer and a documents panel. API calls live in `ui/api_client.py`, display logic in `ui/view.py`; model and document text is drawn as plain text only (D-059). `APP_API_KEY` is sent on ingest and delete only (D-060).
+- **Sessions.** One session id per browser session and a "New conversation" button.
+- **Packaging.** The API image builds (production dependencies only, no Streamlit). The UI service is behind the compose profile `ui` and has its own Dockerfile.
+- **Tests.** Added contract tests for all four statuses over HTTP (Groq 429 and timeouts, Voyage 429, empty database), end-to-end API tests, UI page tests, packaging and README checks (the curl examples are checked by tests).
+- **README.** Architecture diagram (Mermaid text plus `docs/architecture.png`), setup, API examples, evaluation results, known limitations, next steps.
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| UI talks to the API over HTTP | Reuses the same path projects 3 and 6 will use |
+| UI port 8510, compose profile `ui` | Avoids ports used by other local containers; plain `docker compose up` is unchanged |
+| Plain-text rendering of model output | Text from documents and models is data, not markup |
+
+### What was verified
+- 787 tests pass, ruff clean.
+- Owner-reported: the page was run with `streamlit run` and tested in a browser on Nov 17, 2026; the API image builds (524 MB); the UI image builds and reports Streamlit 1.66.0.
+
+### What to watch out for
+- Not verified: the UI image has never been started as a container, and it installs Streamlit with pip, so it does not follow `uv.lock`.
+- The clean-clone test, screenshots and the final demo script are Milestone 7.
+- `/chat` and `/documents` are open (local showcase).
+- Whether the README architecture diagram image matches the final code has not been re-checked after the fix pass (the pipeline gained the guard and the original-wording search).
+
+**Update, Nov 19, 2026 (owner-reported).** The UI image was started as a container (`docker compose --profile ui up -d --no-build ui`) and the page, served on port 8510, answered, refused and asked a clarifying question against the API container; two screenshots from that run are in `docs/media/`. Still not verified: the UI image's dependencies come from pip rather than `uv.lock`, and the clean-clone test is not done.
 
 ## Milestone 7: Demo

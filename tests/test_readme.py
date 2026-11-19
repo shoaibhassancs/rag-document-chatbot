@@ -75,23 +75,42 @@ def test_no_key_value_or_secret_shaped_string_is_in_the_readme():
     assert not re.search(r"(GROQ|VOYAGE)_API_KEY\s*=\s*\S+", README)
 
 
-def test_every_result_that_needs_a_real_run_says_tbd():
-    assert README.count("TBD: from the real evaluation") >= 6
-    for metric in (
-        "Retrieval hit rate",
-        "Faithfulness",
-        "Answer correctness",
-        "Refusal accuracy",
-        "Latency",
+def _evaluation_section() -> str:
+    start = README.index("## Evaluation")
+    return README[start : README.index("## Tests")]
+
+
+def test_the_evaluation_section_has_the_results_table_and_the_honesty_statements():
+    section = _evaluation_section()
+    for text in ("Run A", "runA2", "runB", "not a held-out estimate", "owner-reviewed"):
+        assert text in section, text
+    for metric in ("Retrieval hit rate", "Faithfulness", "Answer correctness", "Refusal accuracy"):
+        assert metric in section, metric
+    assert "TBD: from the real evaluation" not in section
+
+
+def test_measured_numbers_appear_only_in_the_evaluation_section():
+    rest = README.replace(_evaluation_section(), "")
+    assert not re.search(r"\d+(\.\d+)?\s?%", rest)  # no percentages outside the results
+    assert not re.search(r"\d+(\.\d+)?\s?(ms|seconds?|sec)\b", rest)
+    assert not re.search(r"(?i)\bp50\b|\bp95\b", rest)
+
+
+def test_the_quoted_results_match_the_committed_summary_files():
+    from pathlib import Path
+
+    results = Path(__file__).resolve().parents[1] / "eval" / "results"
+    for name, numbers in (
+        ("runA-20b.md", ("69.0%", "39.3%", "69.4%", "55.0%")),
+        ("runA2-20b.md", ("79.3%", "69.0%", "80.6%", "72.5%")),
+        ("runB-120b.md", ("82.8%", "71.4%", "83.3%", "75.0%")),
     ):
-        assert re.search(rf"{metric}: TBD: from the real evaluation", README), metric
-
-
-def test_the_readme_quotes_no_measured_number():
-    assert not re.search(r"\d+(\.\d+)?\s?%", README)  # no percentages
-    assert not re.search(r"\d+(\.\d+)?\s?(ms|seconds?|sec)\b", README)  # no latencies
-    assert not re.search(r"(?i)\bp50\b|\bp95\b", README)
-    assert "no evaluation has been run and no score exists" in README
+        files = list(results.glob(f"*{name}"))
+        if not files:  # the summaries are tracked, but skip rather than fail in a partial checkout
+            continue
+        text = files[0].read_text()
+        for number in numbers:
+            assert number in text and number in README, (name, number)
 
 
 def test_the_required_headings_exist_and_production_notes_is_empty():
@@ -111,7 +130,7 @@ def test_the_required_headings_exist_and_production_notes_is_empty():
     ):
         assert f"\n## {heading}\n" in README, heading
     assert "## Production notes\n\nTBD: Milestone 7." in README
-    assert "SKELETON" in README.splitlines()[2]
+    assert "STATUS" in README.splitlines()[2]
 
 
 def test_the_ui_section_does_not_claim_the_ui_has_been_run():

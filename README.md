@@ -1,6 +1,6 @@
 # RAG Document Chatbot (BrightSmile Dental demo)
 
-SKELETON: headings and one-line placeholders only. Every number or claim that needs a real run says "TBD: from the real evaluation". Nothing here has been measured yet.
+STATUS: the evaluation results are filled in (see Evaluation). Sections marked "TBD" (demo script, screenshots, clean-clone test, production notes) are finished in Milestone 7.
 
 ## What this is
 
@@ -100,7 +100,7 @@ The page has automated tests (Streamlit's own test runner, Streamlit 1.66.0 as l
 
 ## Configuration
 
-All settings live in `.env` (git-ignored); `.env.example` lists every name with no values. Models, prompt versions, the similarity threshold, history length and session lifetime are settings, not code. Current models (all Groq free plan, one OpenAI-compatible client): the small step before retrieval (clarify or rewrite) runs on `openai/gpt-oss-120b` with prompt `clarify_v2`; the answer model is `openai/gpt-oss-20b` (provisional, the final choice is made from the evaluation); the judge is `qwen/qwen3.8-27b`. Embeddings are Voyage `voyage-4` (1024 dimensions).
+All settings live in `.env` (git-ignored); `.env.example` lists every name with no values. Models, prompt versions, the similarity threshold, history length and session lifetime are settings, not code. Current models (all Groq free plan, one OpenAI-compatible client): the small step before retrieval (clarify or rewrite) runs on `openai/gpt-oss-120b` with prompt `clarify_v2`; the answer model is `openai/gpt-oss-20b` (the final choice after evaluating both gpt-oss models; `openai/gpt-oss-120b` is the fallback and a one-line switch, `ANSWER_LLM_MODEL`); the judge is `qwen/qwen3.8-27b`. Embeddings are Voyage `voyage-4` (1024 dimensions).
 
 ## How it answers
 
@@ -113,9 +113,19 @@ All settings live in `.env` (git-ignored); `.env.example` lists every name with 
 
 ## Evaluation
 
-**How to read the results.** Two runs on the same 40 questions will be shown: the baseline (Run A) and the result after one general fix pass (runA2). The fixes were chosen after looking at Run A's failures, so the second run is not a held-out estimate of how the bot does on new questions; it shows what changed on a set that informed the changes. The numbers are in the table below once the runs are done.
+**How to read the results.** There are 40 owner-approved questions (29 answerable, 7 out of scope, 4 vague). **Run A** is the baseline. **runA2** and **runB** are one run each of the same fixed pipeline (similarity gate 0.33, original wording searched when there is no history, clarify guard on); they differ only in the answer model (`gpt-oss-20b` and `gpt-oss-120b`). The fixes were chosen after seeing Run A's failures on these same 40 questions, so the improvement from Run A is **not a held-out estimate** of how the bot does on new questions. A single run has noise of about one or two questions: the clarify step is not deterministic, and the same pipeline moved the retrieval hit rate by 3.5 points between runA2 and runB. The judge is an LLM (`qwen/qwen3.8-27b`); its zeros and the unjudged items were reviewed by the owner (an answer counts as correct at 7 out of 10 or better), and a few passes were spot-checked. Only the zeros were reviewed, so the reviewed scores can only be higher than the judge's. Details, per-question tables and the review verdicts are in `eval/results/` (`M5-comparison.md`, `runA2-20b-summary.md`, `runB-120b-summary.md`, `runA-20b-summary.md`) and in `DECISIONS.md` (D-081 to D-087).
 
-TBD: from the real evaluation. The harness, rubric and the owner-approved question set are in `eval/`; no evaluation has been run and no score exists. Retrieval hit rate: TBD: from the real evaluation. Faithfulness: TBD: from the real evaluation. Answer correctness: TBD: from the real evaluation. Refusal accuracy: TBD: from the real evaluation. Latency: TBD: from the real evaluation.
+| Metric (target) | Run A (baseline) | runA2 (20b) | runB (120b) |
+| --- | --- | --- | --- |
+| Retrieval hit rate, all sources (90%) | 69.0% | 79.3% | 82.8% |
+| Faithfulness, judge (90%) | 100% (n=13) | 100% (n=21) | 100% (n=23) |
+| Answer correctness, **judge score** (85%) | 39.3% | 69.0% | 71.4% |
+| Answer correctness, **owner-reviewed** (85%) | not recomputed | 72.4% (21 of 29) | 75.9% (22 of 29) |
+| Refusal accuracy (95%) | 69.4% | 80.6% | 83.3% |
+| Status accuracy (no target) | 55.0% | 72.5% | 75.0% |
+| Latency p50 / p95 (p50 under 3 s) | 1.6 / 2.6 s | 2.1 / 2.9 s | 2.2 / 3.5 s |
+
+Targets met: faithfulness and latency. Not met: retrieval hit rate, answer correctness and refusal accuracy. Vague-question handling got worse on purpose (100% in Run A, 50% in runA2 and runB): the clarify guard searches a vague message that names a generic subject, which rescued several clear questions that Run A had wrongly turned into clarifying questions and cost two of the four vague ones. The two models are one question apart on every measure, within noise, so no difference between them is claimed. The final answer model is `gpt-oss-20b` (D-087). Run A's published numbers are as the judge produced them; one of its judge zeros was later rated acceptable by the owner and is not recomputed.
 
 ## Tests
 
@@ -133,8 +143,10 @@ Tests mock Groq and Voyage and never call them. Database tests use a throwaway `
 - Answers can vary between runs: model outputs are not exactly repeatable even at temperature 0, and a similar question can be answered once and refused another time when the search query wording changes.
 - A vague message that names a generic subject (for example "the procedure") is searched instead of answered with a clarifying question: the bot asks only when the question has no subject, not whenever it is vague.
 - The models are free-tier models and weaker than paid ones: expect more refusals of answerable questions and more variation than a paid model would give.
-- The similarity threshold and the answer prompt were tuned on a small calibration set; the real test is the evaluation set (TBD: from the real evaluation).
-- The answer model choice between `gpt-oss-20b` and `gpt-oss-120b` is provisional until the evaluation is run on both.
+- The similarity threshold and the answer prompt were tuned on a small calibration set and then adjusted after Run A on the evaluation set, so the evaluation numbers are not a held-out estimate.
+- The answer model was chosen between `gpt-oss-20b` and `gpt-oss-120b` on one run each; they scored the same within noise, so the choice rests on latency and on spreading free-tier quota across two models, not on accuracy.
+- The free models sometimes refuse an answerable question even with the answer in the retrieved text, and they are not deterministic: the same question can be answered in one run and refused in the next.
+- Compound or scenario questions (several facts, or a personal situation) are answered less reliably than single-fact questions.
 - Chunks are smaller than the original target size (a decision recorded in `DECISIONS.md`).
 - An answer that spans two documents can miss the second one when the top-5 search fills slots with near-duplicate chunks from one page.
 - The evaluation judge is an LLM and is somewhat strict or inconsistent about omitted side details. The scores were hand-checked on a sample of the judged answers, which checks the judge, not the chatbot.

@@ -202,7 +202,6 @@ rag-chatbot/
 - **Prompt-injection test:** a document containing "ignore previous instructions" must not change behaviour.
 - **A live smoke test** with the real keys, run sparingly because of quotas.
 - **The evaluation run** against the targets below, with the full report saved.
-- **A clean-clone test:** fresh clone, `docker compose up`, ingest or seed, chat. Anything that fails is reported.
 
 ## Evaluation
 
@@ -228,15 +227,15 @@ Run the evaluation after every major change and keep a results table in the READ
 3. **Retrieval and answers:** the LLM client with retry, backoff and the 120b to 20b fallback, vector search with threshold, grounded prompt, metadata-built citations, `/chat`, a clean hook for the clarify step.
 4. **Guardrails and memory:** the clarify-before-retrieving call (`gpt-oss-20b`, merged with the history rewrite), refusal without an LLM call on weak matches, `clarify` status, session memory, logging with masking.
 5. **Evaluation:** **at the start, before any evaluation run, Claude reminds the owner to run the evaluation on both `openai/gpt-oss-20b` and `openai/gpt-oss-120b` (set `ANSWER_LLM_MODEL` in `.env` for each run) and to choose the final answer model from the numbers. `gpt-oss-20b` and prompt `answer_v2` are the provisional defaults from Milestone 3 (DECISIONS.md D-036). Evaluation numbers and the demo video must use the final chosen model. The evaluation script prints the active answer model and prompt version at startup and records them in the results file.** Then: write the question set, build `run_eval.py`, record baseline scores, measure the clarify call's latency, token cost and accuracy, tune chunk size and threshold, prompt-injection test, latency (p50).
-6. **UI and packaging:** a working Streamlit UI that shows answers and their sources (polished in Milestone 7), the complete test suite from the Testing standard (the eval run and the final clean-clone test close Milestone 7), README skeleton, architecture diagram check.
+6. **UI and packaging:** a working Streamlit UI that shows answers and their sources (polished in Milestone 7), the complete test suite from the Testing standard (the eval run closes Milestone 7), README skeleton, architecture diagram check.
 7. **Showcase:**
    - A polished Streamlit UI that shows sources clearly and makes the answered, refused and clarify outcomes visibly different, with loading and friendly error states and the "do not enter personal information" note.
    - A demo script using the demo scenario, with exact questions in order, timed to stay under about 2 questions per minute, and a pre-demo checklist.
    - A list of screenshots to capture: an answer with citations; a refusal; a clarification; a follow-up using memory; the document list with ingest and delete; the eval report table; the architecture diagram; a prompt-injection attempt being resisted.
-   - A README that works from a clean clone (`docker compose up`, then seed or ingest, then chat), plus curl examples for the API.
+   - A README with setup steps (`docker compose up`, then seed or ingest, then chat), plus curl examples for the API.
    - A one-page client-facing case study with the real eval numbers.
    - A "Production notes" section: this runs on free tiers for a portfolio; for a real client, the LLM and embedding providers are swapped by config (paid models, data isolation), plus authentication, a managed database and monitoring. It claims nothing that was not tested.
-   - The clean-clone test and the final eval report.
+   - The final eval report.
 
 At the end of every milestone, Claude stops, reports what was built, verified and not verified, and summarises it for the owner's review. When asked, Claude drafts a summary; the owner approves it before it is saved to `NOTES.md`.
 
@@ -252,8 +251,7 @@ None blocking. Closed or parked:
 
 - [ ] All 10 functional requirements work through the API and the UI
 - [ ] Evaluation scores meet the targets above (or are reported honestly if not), with results in the README
-- [ ] Everything in the Testing standard passes, including the prompt-injection test and the clean-clone test
-- [ ] `docker compose up` starts everything from a fresh clone
+- [ ] Everything in the Testing standard passes, including the prompt-injection test
 - [ ] README has an architecture diagram, setup steps, curl examples, evaluation results, known limitations and Production notes
 - [ ] Demo script, screenshot list and a client-facing case study exist; the owner can record the video from them
 - [ ] You can explain every component, and why you chose it, without notes

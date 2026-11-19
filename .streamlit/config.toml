@@ -1,4 +1,4 @@
-# Streamlit settings for the demo UI (UNVERIFIED: Streamlit was not installed when this was written).
+# Streamlit settings for the demo UI.
 [server]
 headless = true
 

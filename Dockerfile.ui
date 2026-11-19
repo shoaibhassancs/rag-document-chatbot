@@ -1,7 +1,5 @@
-# PARTLY VERIFIED (owner, Nov 17, 2026): the image builds (compose build, 1 min 52 s) and
-# `import streamlit; print(streamlit.__version__)` inside it prints 1.66.0. Limits: (1) the image has
-# never been started as a container (no `up` of the compose `ui` profile); (2) it installs with pip,
-# so Streamlit's own dependencies are NOT taken from uv.lock: the image is not fully reproducible
+# The image builds and runs (checked Nov 17 and Nov 19, 2026). Limit: it installs with pip, so
+# Streamlit's own dependencies are NOT taken from uv.lock: the image is not fully reproducible
 # until it installs from uv.lock (not done).
 # The Streamlit version is a build argument; compose defaults it to 1.66.0, the version in the `ui`
 # group of uv.lock. Run directly, the build stops if it is missing.

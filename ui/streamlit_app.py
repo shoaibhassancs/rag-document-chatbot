@@ -1,7 +1,6 @@
-"""The demo chat page. The owner ran the earlier version by hand once (Nov 17, 2026). The path
-bootstrap and the new sidebar (collapsed lists, one delete picker) are UNVERIFIED in a browser:
-only AppTest (tests/test_ui.py) and tests/test_ui_import_path.py (how Streamlit starts the file)
-cover them.
+"""The demo chat page. It was run in a browser on Nov 17, 2026 and as a container (Docker image,
+port 8510) on Nov 19, 2026. AppTest (tests/test_ui.py) and tests/test_ui_import_path.py (how
+Streamlit starts the file) also cover it.
 
 Run locally:  uv run --group ui streamlit run ui/streamlit_app.py --server.port 8510
 It needs the API running (API_BASE_URL, default http://127.0.0.1:8010). APP_API_KEY (optional) is

@@ -171,3 +171,8 @@ def test_the_demo_video_is_small_linked_and_listed():
     assert video.is_file() and video.stat().st_size < 10 * 1024 * 1024
     assert "docs/media/demo.mp4" in README
     assert "`demo.mp4`" in (media / "README.md").read_text(encoding="utf-8")
+
+
+def test_the_quick_start_has_no_placeholder_and_says_what_was_checked():
+    section = README.split("## Quick start")[1].split("\n## ")[0]
+    assert "TBD" not in section and "images build and run" in section

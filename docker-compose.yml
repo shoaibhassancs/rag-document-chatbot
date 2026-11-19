@@ -34,10 +34,8 @@ services:
       db:
         condition: service_healthy
 
-  # The demo chat UI. UNVERIFIED DRAFT (Milestone 6): behind a profile so that a plain
-  # `docker compose up` starts exactly what it started before. Start it with
-  #   STREAMLIT_VERSION=<pinned version> docker compose --profile ui up --build
-  # once Streamlit has been installed, locked and checked (see handoff/MORNING_TODO.md).
+  # The demo chat UI. Behind a profile so that a plain `docker compose up` starts only the API
+  # and the database. Start it with `docker compose --profile ui up --build`.
   ui:
     profiles: ["ui"]
     build:

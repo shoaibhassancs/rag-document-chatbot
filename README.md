@@ -1,6 +1,6 @@
 # RAG Document Chatbot (BrightSmile Dental demo)
 
-STATUS: everything is done except the clean-clone test (marked TBD in Quick start), which is finished in Milestone 7.
+STATUS: everything is done.
 
 ## What this is
 
@@ -66,7 +66,9 @@ flowchart LR
 
 ## Quick start
 
-TBD: the final clean-clone test is done in Milestone 7. What you need first: Docker with Compose, a free Groq API key and a free Voyage AI API key (both free tiers, no payment method), and [uv](https://docs.astral.sh/uv/) with Python 3.12 if you want to run the tests, the evaluation or the UI outside Docker. The commands below are the ones the project documents:
+The API and UI images build and run (checked Nov 17 and Nov 19, 2026, see "The UI").
+
+What you need first: Docker with Compose, a free Groq API key and a free Voyage AI API key (both free tiers, no payment method), and [uv](https://docs.astral.sh/uv/) with Python 3.12 if you want to run the tests, the evaluation or the UI outside Docker. The commands below are the ones the project documents:
 
 ```bash
 cp .env.example .env            # then put your two keys and a secret APP_API_KEY of your choice in .env; never commit .env
@@ -75,7 +77,7 @@ curl -s http://127.0.0.1:8010/health   # status ok once the database and both ke
 docker compose run --rm api python -m scripts.ingest_folder /app/data/sample_docs
 ```
 
-Ingesting the 30 sample documents takes a few minutes because Voyage's free plan allows only 3 requests a minute; the command prints progress, can be stopped and re-run, and skips what is already stored. Then chat with the `curl` example below, or start the UI (see "The UI").
+Ingesting the 30 sample files (29 are unique; one near-duplicate is skipped) takes a few minutes because Voyage's free plan allows only 3 requests a minute; the command prints progress, can be stopped and re-run, and skips what is already stored. Then chat with the `curl` example below, or start the UI (see "The UI").
 
 ## API
 

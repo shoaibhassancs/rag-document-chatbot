@@ -77,8 +77,8 @@ def test_compose_interpolation_cannot_break_a_plain_compose_up():
 
 def test_the_ui_dockerfile_is_marked_partly_verified_with_a_required_version_argument():
     # Changed deliberately (INSTRUCTIONS_25): the owner built it and saw 1.66.0.
-    assert UI_DOCKERFILE.startswith("# PARTLY VERIFIED")
-    assert "never been started as a container" in UI_DOCKERFILE and "uv.lock" in UI_DOCKERFILE
+    assert UI_DOCKERFILE.startswith("# The image builds and runs")
+    assert "uv.lock" in UI_DOCKERFILE and "never been started" not in UI_DOCKERFILE
     assert re.search(r"^ARG STREAMLIT_VERSION$", UI_DOCKERFILE, re.MULTILINE)  # no default value
     assert 'test -n "$STREAMLIT_VERSION"' in UI_DOCKERFILE
     assert "streamlit==${STREAMLIT_VERSION}" in UI_DOCKERFILE and "COPY .env" not in UI_DOCKERFILE
@@ -123,5 +123,6 @@ def test_the_page_never_shows_or_stores_the_key():
     }
 
 
-def test_the_page_file_says_it_is_unverified():
-    assert "UNVERIFIED" in (ast.get_docstring(PAGE) or "")
+def test_the_page_docstring_says_how_it_was_run():
+    doc = ast.get_docstring(PAGE) or ""
+    assert "AppTest" in doc and "UNVERIFIED" not in doc

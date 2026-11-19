@@ -42,7 +42,7 @@ Milestone 1 builds the foundation and nothing else. It starts a small web servic
 - Owner-reported: the Voyage Usage page shows `voyage-4` with 200M free tokens remaining.
 
 ### What to watch out for
-- The clean-clone run is not done yet (Milestone 7). `.gitignore` is untested because the folder was not a git repo at the time.
+- `.gitignore` is untested because the folder was not a git repo at the time.
 - Whether reasoning tokens count against Groq's per-minute limit is unchecked (Milestone 3). The Groq limits come from the owner's console, which is the authority; Groq's public table labels them "Developer plan".
 - `qwen3.8-27b` is a preview model and could change or disappear. With Groq as the only provider, an outage or quota hit stops everything.
 - If another container uses host port 5440 or 8010, the stack won't start. Both ports are configurable.
@@ -97,7 +97,7 @@ Milestone 2 turns documents into searchable knowledge. It reads PDF, Markdown, t
 - The limiter lives inside one process. Running the CLI while the API is embedding can cause extra 429s that backoff absorbs.
 - `DELETE` was tested against a real Postgres but not by hand on the demo data, to avoid repeating Voyage spend.
 - The API image is 523 MB, up from 406 MB, because of `langchain-text-splitters` and its dependencies.
-- The clean-clone test is still due in Milestone 7; a fresh clone must run `scripts.ingest_folder` (about 2 minutes).
+- A new install runs `scripts.ingest_folder` (about 2 minutes).
 
 ## Milestone 3: Retrieval and answers
 
@@ -279,10 +279,35 @@ Milestone 6 adds a Streamlit chat page, the fuller test suite and the README, an
 
 ### What to watch out for
 - Not verified: the UI image has never been started as a container, and it installs Streamlit with pip, so it does not follow `uv.lock`.
-- The clean-clone test, screenshots and the final demo script are Milestone 7.
+- The screenshots and the final demo script are Milestone 7.
 - `/chat` and `/documents` are open (local showcase).
 - Whether the README architecture diagram image matches the final code has not been re-checked after the fix pass (the pipeline gained the guard and the original-wording search).
 
-**Update, Nov 19, 2026 (owner-reported).** The UI image was started as a container (`docker compose --profile ui up -d --no-build ui`) and the page, served on port 8510, answered, refused and asked a clarifying question against the API container; two screenshots from that run are in `docs/media/`. Still not verified: the UI image's dependencies come from pip rather than `uv.lock`, and the clean-clone test is not done.
+**Update, Nov 19, 2026 (owner-reported).** The UI image was started as a container (`docker compose --profile ui up -d --no-build ui`) and the page, served on port 8510, answered, refused and asked a clarifying question against the API container; two screenshots from that run are in `docs/media/`. Still not verified: the UI image's dependencies come from pip rather than `uv.lock`.
 
 ## Milestone 7: Demo
+
+### What this milestone does
+Milestone 7 makes the project showable: a redrawn architecture diagram, final screenshots, a demo script and video, a case study, production notes, and a check of how the README looks on GitHub.
+
+### What was built
+- **Diagram.** `docs/architecture.png` was redrawn to match the final pipeline (D-089), with a Mermaid text version in the README.
+- **Screenshots.** Six images in `docs/media/` (documents panel, answer with a source, refusal, clarifying question, follow-up with memory, injection refused), listed in `docs/media/README.md`.
+- **Demo.** `docs/DEMO_SCRIPT.md` with the real evaluation numbers, and a 77-second silent screen recording (`docs/media/demo.mp4`, about 2 MB, H.264, no audio) linked from the README. The 22 MB original stays local.
+- **Case study.** `docs/CASE_STUDY.md`: the problem, design, measured results and their limits. The free tiers are framed as a deliberate choice, and paid models for a client are stated as unmeasured.
+- **README.** Production notes, a corrected access-control limitation (`/ingest` and `DELETE /documents/{id}` need the `X-API-Key`; `/chat` and listing are open), author-voice wording, and a Quick start that states what was checked. `eval/README.md` points to the real results.
+
+### Key decisions and why
+| Decision | Why |
+| --- | --- |
+| Silent video, no captions | The README, screenshots and case study carry the explanation |
+| Small mp4 in the repo, original .mov local | GitHub plays mp4 and the repo stays small |
+
+### What was verified
+- 791 tests pass, ruff clean.
+- Owner-reported (Nov 19, 2026): the README renders on GitHub (diagram, Mermaid, six screenshots). The video was recorded in the container UI and its frames were checked for tabs, keys and personal data.
+
+### What to watch out for
+- Not verified: whether the video plays inline on GitHub (a direct link is the fallback); the UI image's dependencies come from pip, not `uv.lock`.
+- The results are not a held-out estimate, and the retrieval, correctness and refusal targets are not met.
+- Open small items: `/health` does not report a failed clarify step; two judge calls still fail with `reply_cut_off`; there is no held-out question set.

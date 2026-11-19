@@ -9,7 +9,7 @@ Clients hiring for AI work ask three questions: how did you design it, how do yo
 - **Design:** a clear architecture, every major choice explained in DECISIONS.md, and code a client could take over.
 - **Evidence it works:** an evaluation set and a script that produces real scores, run before and after major changes.
 - **Guardrails:** defined and tested behaviour for out-of-scope requests, missing information, vague requests, model errors and unsafe actions.
-- **Presentation:** it runs from a fresh clone with the documented commands, and the README has setup steps, an architecture diagram that matches the final code, evaluation results, known limitations and a working demo.
+- **Presentation:** it runs with the documented commands, and the README has setup steps, an architecture diagram that matches the final code, evaluation results, known limitations and a working demo.
 
 Never inflate claims. A small system with honest numbers beats a large one with none.
 

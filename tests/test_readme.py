@@ -129,7 +129,8 @@ def test_the_required_headings_exist_and_production_notes_is_empty():
         "Production notes",
     ):
         assert f"\n## {heading}\n" in README, heading
-    assert "## Production notes\n\nTBD: Milestone 7." in README
+    notes = README.split("\n## Production notes\n")[1].split("\n## Data")[0]
+    assert "TBD" not in notes and "X-API-Key" in notes and "held-out" in notes
     assert "STATUS" in README.splitlines()[2]
 
 
@@ -154,3 +155,11 @@ def test_the_readme_embeds_the_architecture_picture_and_it_exists():
     assert "![" in section and "(docs/architecture.png)" in section
     assert (root / "docs" / "architecture.png").is_file()
     assert "updated in Milestone 7" not in README
+
+
+def test_the_case_study_exists_is_linked_and_has_no_placeholder():
+    study_path = Path(__file__).resolve().parent.parent / "docs" / "CASE_STUDY.md"
+    study = study_path.read_text(encoding="utf-8")
+    assert "docs/CASE_STUDY.md" in README
+    assert "held-out" in study
+    assert "TBD" not in study

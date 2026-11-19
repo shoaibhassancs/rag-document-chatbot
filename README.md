@@ -20,6 +20,12 @@ The demo is the 2 to 3 minute script in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.m
 
 These questions show features; they are not the evaluation questions. Stills of the same beats are in [Screenshots](#screenshots).
 
+## Demo video
+
+A silent screen recording, just over a minute long, of the container UI showing the five beats above in the same order. Open it directly: [docs/media/demo.mp4](docs/media/demo.mp4).
+
+<video src="https://raw.githubusercontent.com/shoaibhassancs/rag-document-chatbot/main/docs/media/demo.mp4" controls muted width="800"></video>
+
 ## Architecture
 
 ![Architecture: ingestion (documents to pgvector) and the query path from the Streamlit UI through FastAPI /chat, the clarify or rewrite call, the clarify guard, Voyage embedding, top 5 search, the 0.33 gate, the grounded answer call and the citations, ending in the statuses clarify, refused and answered](docs/architecture.png)

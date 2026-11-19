@@ -163,3 +163,11 @@ def test_the_case_study_exists_is_linked_and_has_no_placeholder():
     assert "docs/CASE_STUDY.md" in README
     assert "held-out" in study
     assert "TBD" not in study
+
+
+def test_the_demo_video_is_small_linked_and_listed():
+    media = Path(__file__).resolve().parent.parent / "docs" / "media"
+    video = media / "demo.mp4"
+    assert video.is_file() and video.stat().st_size < 10 * 1024 * 1024
+    assert "docs/media/demo.mp4" in README
+    assert "`demo.mp4`" in (media / "README.md").read_text(encoding="utf-8")

@@ -59,3 +59,6 @@ handoff/
 
 # Handbook notes exports delivered by the chat assistant (local only, never committed)
 Claude outputs/
+
+# Demo script (kept local)
+docs/DEMO_SCRIPT.md
